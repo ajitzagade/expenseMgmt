@@ -1,0 +1,268 @@
+// TripSplit database schema.
+//
+// Financial conventions:
+//  - All monetary values are integer minor units (e.g. paise for INR) in the
+//    trip's currency. Never floats.
+//  - ExpenseAllocation rows always sum to Expense.amountMinor, and
+//    ExpensePayerContribution rows always sum to Expense.amountMinor.
+//    Both invariants are enforced in the service layer inside a single
+//    database transaction per write.
+//  - Balances are always derived from authoritative rows (contributions,
+//    allocations, confirmed settlements); no duplicated totals are stored.
+//
+// Identity conventions:
+//  - User: a registered account.
+//  - Participant: a stable per-trip financial identity. It may be linked to a
+//    User (userId) or be a guest (userId = null). All financial rows reference
+//    Participant ids, never User ids, so guests work naturally and claiming a
+//    guest identity is a single userId update that preserves history.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                String        @id @default(cuid())
+  email             String        @unique
+  passwordHash      String
+  name              String
+  preferredCurrency String        @default("INR")
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  sessions          Session[]
+  participants      Participant[]
+  createdTrips      Trip[]        @relation("TripCreator")
+  invitationsMade   TripInvitation[]
+  activityEntries   ActivityLog[]
+  passwordResets    PasswordResetToken[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+enum TripStatus {
+  UPCOMING
+  ONGOING
+  COMPLETED
+  ARCHIVED
+}
+
+model Trip {
+  id          String       @id @default(cuid())
+  name        String
+  destination String?
+  description String?
+  startDate   DateTime?    @db.Date
+  endDate     DateTime?    @db.Date
+  currency    String       @default("INR")
+  status      TripStatus   @default(UPCOMING)
+  /// Index into the app's trip color palette (simple visual identifier).
+  colorIndex  Int          @default(0)
+  createdById String
+  createdBy   User         @relation("TripCreator", fields: [createdById], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  participants Participant[]
+  invitations  TripInvitation[]
+  expenses     Expense[]
+  settlements  Settlement[]
+  activity     ActivityLog[]
+
+  @@index([createdById])
+}
+
+enum ParticipantRole {
+  ADMIN
+  MEMBER
+}
+
+model Participant {
+  id        String          @id @default(cuid())
+  tripId    String
+  trip      Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  /// Display name. For linked participants this is kept in sync at claim time
+  /// but remains a per-trip snapshot afterwards.
+  name      String
+  /// Null for guest participants who have not claimed their identity yet.
+  userId    String?
+  user      User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  role      ParticipantRole @default(MEMBER)
+  /// Soft deactivation: inactive participants keep their financial history but
+  /// are excluded from new expenses by default and lose trip access.
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+
+  contributions      ExpensePayerContribution[]
+  allocations        ExpenseAllocation[]
+  settlementsSent    Settlement[] @relation("SettlementFrom")
+  settlementsGotten  Settlement[] @relation("SettlementTo")
+  expensesCreated    Expense[]    @relation("ExpenseCreator")
+  invitationsClaimed TripInvitation[] @relation("InvitationClaimTarget")
+
+  // A registered user can hold at most one participant identity per trip.
+  @@unique([tripId, userId])
+  @@index([tripId])
+  @@index([userId])
+}
+
+model TripInvitation {
+  id          String    @id @default(cuid())
+  tripId      String
+  trip        Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  /// SHA-256 hash of the invite token; the raw token only ever lives in the URL.
+  tokenHash   String    @unique
+  createdById String
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  /// When set, this invitation claims a specific guest participant identity.
+  participantId String?
+  participant   Participant? @relation("InvitationClaimTarget", fields: [participantId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  useCount    Int       @default(0)
+  maxUses     Int       @default(25)
+  createdAt   DateTime  @default(now())
+
+  @@index([tripId])
+}
+
+enum SplitMethod {
+  EQUAL
+  EXACT
+  PERCENTAGE
+  SHARES
+  CUSTOM
+}
+
+model Expense {
+  id          String      @id @default(cuid())
+  tripId      String
+  trip        Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  title       String
+  /// Integer minor units in the trip currency. Always > 0.
+  amountMinor Int
+  category    String      @default("Miscellaneous")
+  /// When the expense happened (user supplied, defaults to now).
+  spentAt     DateTime    @default(now())
+  splitMethod SplitMethod @default(EQUAL)
+  notes       String?
+  merchant    String?
+  createdByParticipantId String
+  createdByParticipant   Participant @relation("ExpenseCreator", fields: [createdByParticipantId], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  payers      ExpensePayerContribution[]
+  allocations ExpenseAllocation[]
+
+  @@index([tripId, spentAt(sort: Desc)])
+  @@index([tripId, category])
+}
+
+model ExpensePayerContribution {
+  id            String      @id @default(cuid())
+  expenseId     String
+  expense       Expense     @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  participantId String
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  /// Integer minor units, > 0. All rows for an expense sum to its amountMinor.
+  amountMinor   Int
+
+  @@unique([expenseId, participantId])
+  @@index([participantId])
+}
+
+model ExpenseAllocation {
+  id            String      @id @default(cuid())
+  expenseId     String
+  expense       Expense     @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  participantId String
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  /// Integer minor units, >= 0. All rows for an expense sum to its amountMinor.
+  amountMinor   Int
+  /// Split parameter used to produce this allocation, kept so the edit form can
+  /// restore the original inputs: percent basis points for PERCENTAGE, share
+  /// count for SHARES, null otherwise.
+  weight        Int?
+
+  @@unique([expenseId, participantId])
+  @@index([participantId])
+}
+
+enum SettlementStatus {
+  CONFIRMED
+  REVERSED
+}
+
+/// A real money transfer recorded between two participants (reimbursement /
+/// settlement). Never counted as a trip expense. Partial amounts are allowed;
+/// suggestions are always recomputed from current outstanding balances.
+model Settlement {
+  id                String           @id @default(cuid())
+  tripId            String
+  trip              Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  fromParticipantId String
+  fromParticipant   Participant      @relation("SettlementFrom", fields: [fromParticipantId], references: [id], onDelete: Restrict)
+  toParticipantId   String
+  toParticipant     Participant      @relation("SettlementTo", fields: [toParticipantId], references: [id], onDelete: Restrict)
+  /// Integer minor units, > 0.
+  amountMinor       Int
+  method            String?
+  note              String?
+  status            SettlementStatus @default(CONFIRMED)
+  paidAt            DateTime         @default(now())
+  /// Reversal is an auditable correction, not a delete.
+  reversedAt        DateTime?
+  reversalReason    String?
+  /// Client-generated key making settlement recording idempotent.
+  idempotencyKey    String?          @unique
+  createdByUserId   String
+  createdAt         DateTime         @default(now())
+
+  @@index([tripId])
+  @@index([fromParticipantId])
+  @@index([toParticipantId])
+}
+
+/// Append-only audit trail for material changes.
+model ActivityLog {
+  id        String   @id @default(cuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  /// e.g. TRIP_CREATED, EXPENSE_ADDED, EXPENSE_UPDATED, EXPENSE_DELETED,
+  /// PARTICIPANT_ADDED, SETTLEMENT_RECORDED, SETTLEMENT_REVERSED, ...
+  type      String
+  message   String
+  /// Snapshot of the relevant record(s) for auditability.
+  data      Json?
+  createdAt DateTime @default(now())
+
+  @@index([tripId, createdAt(sort: Desc)])
+}
