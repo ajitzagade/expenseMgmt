@@ -98,7 +98,7 @@ export function Field({
 // ---------- Surfaces & feedback ----------
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cx("rounded-card border border-line bg-surface shadow-card", className)}>{children}</div>;
+  return <div className={cx("rounded-card border border-line/80 bg-surface shadow-card", className)}>{children}</div>;
 }
 
 export function Badge({

@@ -42,7 +42,7 @@ export default async function TripsPage() {
             {active.map((trip) => (
               <li key={trip.id}>
                 <Link href={`/trips/${trip.id}`} className="block h-full">
-                  <Card className="flex h-full flex-col p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_6px_20px_rgb(32_41_35/0.08)]">
+                  <Card className="flex h-full flex-col p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-card-raised">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <span
