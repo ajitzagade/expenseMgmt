@@ -61,7 +61,7 @@ describe("financial integrity", () => {
   });
 
   it("distributes awkward equal splits without losing a paisa", async () => {
-    const expense = await createExpense(tripId, user.id, {
+    const { expense } = await createExpense(tripId, user.id, {
       title: "₹100 three ways",
       amountMinor: 10000,
       category: "Food",
@@ -104,7 +104,7 @@ describe("financial integrity", () => {
     expect(await prisma.participant.findUnique({ where: { id: pid["Guest B"] } })).toBeNull();
 
     // Guest A gains history, then removal preserves it.
-    const expense = await createExpense(tripId, user.id, {
+    const { expense } = await createExpense(tripId, user.id, {
       title: "Guest A's share",
       amountMinor: 5000,
       category: "Food",

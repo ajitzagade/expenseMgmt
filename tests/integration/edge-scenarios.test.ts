@@ -25,7 +25,7 @@ describe("edge scenarios", () => {
     );
 
     // ₹1,000 paid by Priya, split equally -> Dev owes ₹500.
-    const expense = await createExpense(trip.id, user.id, {
+    const { expense } = await createExpense(trip.id, user.id, {
       title: "Dinner",
       amountMinor: 100000,
       category: "Food",
@@ -112,7 +112,7 @@ describe("edge scenarios", () => {
 
     // ₹10,000.01 among 13 people: cannot divide evenly; remainder must be
     // distributed deterministically with nothing lost.
-    const expense = await createExpense(trip.id, host.id, {
+    const { expense } = await createExpense(trip.id, host.id, {
       title: "Houseboat",
       amountMinor: 1000001,
       category: "Accommodation",
@@ -167,5 +167,66 @@ describe("edge scenarios", () => {
       { fromParticipantId: pid["Alpha"], toParticipantId: pid["Beta"], amountMinor: 5000 },
     ]);
     expect(state.reconciliationMinor).toBe(0);
+  });
+});
+
+describe("expense creation idempotency", () => {
+  it("replays, rejects cross-trip reuse, and survives a concurrent race", async () => {
+    const user = await createUser("Idem", "idem@example.com");
+    const trip = await createTrip({ id: user.id, name: "Idem" }, {
+      name: "Idempotent Trip",
+      currency: "INR",
+      colorIndex: 0,
+      participantNames: ["Pal"],
+    });
+    const me = await prisma.participant.findFirstOrThrow({ where: { tripId: trip.id, userId: user.id } });
+    const body = (key: string) => ({
+      title: "Lunch",
+      amountMinor: 20000,
+      category: "Food",
+      payers: [{ participantId: me.id, amountMinor: 20000 }],
+      splitMethod: "EQUAL" as const,
+      participants: [{ participantId: me.id }],
+      idempotencyKey: key,
+    });
+
+    // Sequential replay returns the original row, creates nothing new.
+    const key1 = "22222222-2222-4222-8222-222222222221";
+    const first = await createExpense(trip.id, user.id, body(key1));
+    const replay = await createExpense(trip.id, user.id, body(key1));
+    expect(first.created).toBe(true);
+    expect(replay.created).toBe(false);
+    expect(replay.expense.id).toBe(first.expense.id);
+    expect(await prisma.expense.count({ where: { idempotencyKey: key1 } })).toBe(1);
+
+    // The same key on a different trip is rejected, not leaked.
+    const otherTrip = await createTrip({ id: user.id, name: "Idem" }, {
+      name: "Other Trip",
+      currency: "INR",
+      colorIndex: 1,
+      participantNames: [],
+    });
+    const otherMe = await prisma.participant.findFirstOrThrow({ where: { tripId: otherTrip.id } });
+    await expect(
+      createExpense(otherTrip.id, user.id, {
+        ...body(key1),
+        payers: [{ participantId: otherMe.id, amountMinor: 20000 }],
+        participants: [{ participantId: otherMe.id }],
+      }),
+    ).rejects.toMatchObject({ code: "IDEMPOTENCY_REUSE" });
+
+    // Two concurrent requests with one key resolve to a single expense.
+    const key2 = "22222222-2222-4222-8222-222222222222";
+    const [a, b] = await Promise.all([
+      createExpense(trip.id, user.id, body(key2)),
+      createExpense(trip.id, user.id, body(key2)),
+    ]);
+    expect(a.expense.id).toBe(b.expense.id);
+    expect([a.created, b.created].filter(Boolean).length).toBeLessThanOrEqual(1);
+    expect(await prisma.expense.count({ where: { idempotencyKey: key2 } })).toBe(1);
+    // Exactly one audit entry for the single creation.
+    expect(
+      await prisma.activityLog.count({ where: { tripId: trip.id, type: "EXPENSE_ADDED", message: 'added "Lunch"' } }),
+    ).toBe(2); // key1 + key2 creations, replays logged nothing extra
   });
 });

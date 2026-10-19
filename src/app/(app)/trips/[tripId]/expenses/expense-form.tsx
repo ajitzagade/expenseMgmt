@@ -100,6 +100,9 @@ export function ExpenseForm({
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // One key per form instance: a double-click or a retry after a lost
+  // response replays the same creation instead of double-recording.
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   function setPerson(id: string, patch: Partial<PerPerson>) {
     setPerPerson((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
@@ -193,7 +196,7 @@ export function ExpenseForm({
         toast(`Expense "${title}" updated`);
         router.push(`/trips/${tripId}/expenses/${initial.id}`);
       } else {
-        await api(`/api/trips/${tripId}/expenses`, { method: "POST", json: body });
+        await api(`/api/trips/${tripId}/expenses`, { method: "POST", json: { ...body, idempotencyKey } });
         toast(`Expense "${title}" added`);
         router.push(`/trips/${tripId}/expenses`);
       }

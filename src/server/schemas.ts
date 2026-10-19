@@ -121,6 +121,9 @@ export const expenseWriteSchema = z.object({
   participants: z.array(splitParticipantSchema).min(1, "Select at least one participant").max(50),
 });
 
+/** Creation accepts a client idempotency key; updates are naturally idempotent. */
+export const expenseCreateSchema = expenseWriteSchema.extend({ idempotencyKey: z.uuid().optional() });
+
 export const splitPreviewSchema = z.object({
   amountMinor,
   splitMethod: z.enum(SPLIT_METHODS),

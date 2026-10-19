@@ -174,6 +174,8 @@ model Expense {
   merchant    String?
   createdByParticipantId String
   createdByParticipant   Participant @relation("ExpenseCreator", fields: [createdByParticipantId], references: [id])
+  /// Client-generated key making expense creation idempotent (retry-safe).
+  idempotencyKey String?  @unique
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 

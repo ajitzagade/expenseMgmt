@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseBody, withErrorHandling } from "@/server/api";
-import { expenseWriteSchema } from "@/server/schemas";
+import { expenseCreateSchema } from "@/server/schemas";
 import { createExpense, listExpenses } from "@/server/services/expense-service";
 import { requireTripAccess } from "@/server/services/trip-service";
 import { requireUser } from "@/lib/session";
@@ -26,7 +26,8 @@ export const GET = withErrorHandling(async (req: NextRequest, ctx: Ctx) => {
 export const POST = withErrorHandling(async (req: NextRequest, ctx: Ctx) => {
   const user = await requireUser();
   const { tripId } = await ctx.params;
-  const input = await parseBody(req, expenseWriteSchema);
-  const expense = await createExpense(tripId, user.id, input);
-  return NextResponse.json({ expense }, { status: 201 });
+  const input = await parseBody(req, expenseCreateSchema);
+  const { expense, created } = await createExpense(tripId, user.id, input);
+  // 200 (not 201) signals an idempotent replay of an earlier creation.
+  return NextResponse.json({ expense }, { status: created ? 201 : 200 });
 });

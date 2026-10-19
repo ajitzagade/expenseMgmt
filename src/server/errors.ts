@@ -1,4 +1,5 @@
 import { DomainError } from "@/domain/money";
+import { Prisma } from "@/generated/prisma/client";
 
 /**
  * Service-layer error with an HTTP status. Thrown by services, mapped to a
@@ -29,6 +30,27 @@ export class AppError extends Error {
   static conflict(message: string, code = "CONFLICT"): AppError {
     return new AppError(409, code, message);
   }
+}
+
+/**
+ * True when the error is a Postgres unique-constraint violation on `column`.
+ * Used to resolve idempotency races: two concurrent requests with the same
+ * key both pass the pre-check; the loser's INSERT lands here and is answered
+ * with the winner's row instead of a 500.
+ */
+export function isUniqueViolation(error: unknown, column: string): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") return false;
+  const meta = error.meta as Record<string, unknown> | undefined;
+  // Engine-dependent shapes: a column array, a constraint-name string, or
+  // (driver adapters) a nested { constraint: { index } } / { fields }.
+  const target = meta?.target;
+  if (Array.isArray(target)) return (target as string[]).includes(column);
+  if (typeof target === "string") return target.includes(column);
+  const cause = (meta?.driverAdapterError as { cause?: { constraint?: { index?: string; fields?: string[] } } } | undefined)
+    ?.cause;
+  if (typeof cause?.constraint?.index === "string") return cause.constraint.index.includes(column);
+  if (Array.isArray(cause?.constraint?.fields)) return cause.constraint.fields.includes(column);
+  return false;
 }
 
 /** Converts domain validation failures into 400s; rethrows anything else. */

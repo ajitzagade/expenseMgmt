@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { AppError } from "@/server/errors";
+import { AppError, isUniqueViolation } from "@/server/errors";
 import { computeSplit, validatePayerContributions, type SplitMethod, type SplitParticipantInput } from "@/domain/split";
 import { assertTripOpen, requireTripAccess, type TripAccess } from "./trip-service";
 import { logActivity } from "./activity";
@@ -16,6 +16,8 @@ export interface ExpenseWriteInput {
   payers: { participantId: string; amountMinor: number }[];
   splitMethod: SplitMethod;
   participants: SplitParticipantInput[];
+  /** Create only: client-generated key making creation retry-safe. */
+  idempotencyKey?: string;
 }
 
 const expenseInclude = {
@@ -86,37 +88,71 @@ function snapshot(expense: ExpenseDetail): Prisma.InputJsonValue {
   };
 }
 
-export async function createExpense(tripId: string, userId: string, input: ExpenseWriteInput): Promise<ExpenseDetail> {
+/**
+ * Creates an expense. Idempotent when `idempotencyKey` is provided: a replay
+ * returns the originally created expense (`created: false`) instead of a
+ * duplicate, and a concurrent duplicate request resolves to the winner's row
+ * via the unique constraint rather than failing.
+ */
+export async function createExpense(
+  tripId: string,
+  userId: string,
+  input: ExpenseWriteInput,
+): Promise<{ expense: ExpenseDetail; created: boolean }> {
   const access = await requireTripAccess(tripId, userId);
   assertTripOpen(access.trip);
+
+  const findReplay = () =>
+    prisma.expense.findUnique({ where: { idempotencyKey: input.idempotencyKey! }, include: expenseInclude });
+  if (input.idempotencyKey) {
+    const existing = await findReplay();
+    if (existing) {
+      // A key from another trip is a client bug or probing — never leak the row.
+      if (existing.tripId !== tripId) throw AppError.conflict("Idempotency key already used", "IDEMPOTENCY_REUSE");
+      return { expense: existing, created: false };
+    }
+  }
+
   const { allocationRows, payerRows } = await prepareExpense(tripId, input);
 
-  return prisma.$transaction(async (tx) => {
-    const expense = await tx.expense.create({
-      data: {
+  try {
+    const expense = await prisma.$transaction(async (tx) => {
+      const created = await tx.expense.create({
+        data: {
+          tripId,
+          title: input.title,
+          amountMinor: input.amountMinor,
+          category: input.category,
+          spentAt: input.spentAt ? new Date(input.spentAt) : new Date(),
+          splitMethod: input.splitMethod,
+          notes: input.notes,
+          merchant: input.merchant,
+          createdByParticipantId: access.participant.id,
+          idempotencyKey: input.idempotencyKey,
+          payers: { create: payerRows },
+          allocations: { create: allocationRows },
+        },
+        include: expenseInclude,
+      });
+      await logActivity(tx, {
         tripId,
-        title: input.title,
-        amountMinor: input.amountMinor,
-        category: input.category,
-        spentAt: input.spentAt ? new Date(input.spentAt) : new Date(),
-        splitMethod: input.splitMethod,
-        notes: input.notes,
-        merchant: input.merchant,
-        createdByParticipantId: access.participant.id,
-        payers: { create: payerRows },
-        allocations: { create: allocationRows },
-      },
-      include: expenseInclude,
+        actorId: userId,
+        type: "EXPENSE_ADDED",
+        message: `added "${created.title}"`,
+        data: snapshot(created),
+      });
+      return created;
     });
-    await logActivity(tx, {
-      tripId,
-      actorId: userId,
-      type: "EXPENSE_ADDED",
-      message: `added "${expense.title}"`,
-      data: snapshot(expense),
-    });
-    return expense;
-  });
+    return { expense, created: true };
+  } catch (error) {
+    // Concurrent request with the same key won the insert: return its row.
+    if (input.idempotencyKey && isUniqueViolation(error, "idempotencyKey")) {
+      const winner = await findReplay();
+      if (winner && winner.tripId === tripId) return { expense: winner, created: false };
+      throw AppError.conflict("Idempotency key already used", "IDEMPOTENCY_REUSE");
+    }
+    throw error;
+  }
 }
 
 /** The expense's creator or a trip admin may modify it. */

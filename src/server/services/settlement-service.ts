@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { AppError } from "@/server/errors";
+import { AppError, isUniqueViolation } from "@/server/errors";
 import { suggestSettlements, type SuggestedTransfer } from "@/domain/settlement";
 import { assertTripOpen, requireTripAccess } from "./trip-service";
 import { getTripFinancials, type ParticipantWithBalance } from "./balance-service";
@@ -74,8 +74,9 @@ export async function recordSettlement(tripId: string, userId: string, input: Re
   }
   const nameOf = new Map(parties.map((p) => [p.id, p.name]));
 
-  return prisma.$transaction(async (tx) => {
-    const settlement = await tx.settlement.create({
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const settlement = await tx.settlement.create({
       data: {
         tripId,
         fromParticipantId: input.fromParticipantId,
@@ -84,19 +85,28 @@ export async function recordSettlement(tripId: string, userId: string, input: Re
         method: input.method,
         note: input.note,
         paidAt: input.paidAt ? new Date(input.paidAt) : new Date(),
-        idempotencyKey: input.idempotencyKey,
-        createdByUserId: userId,
-      },
+          idempotencyKey: input.idempotencyKey,
+          createdByUserId: userId,
+        },
+      });
+      await logActivity(tx, {
+        tripId,
+        actorId: userId,
+        type: "SETTLEMENT_RECORDED",
+        message: `recorded a payment: ${nameOf.get(input.fromParticipantId)} paid ${nameOf.get(input.toParticipantId)}`,
+        data: { settlementId: settlement.id, amountMinor: input.amountMinor },
+      });
+      return settlement;
     });
-    await logActivity(tx, {
-      tripId,
-      actorId: userId,
-      type: "SETTLEMENT_RECORDED",
-      message: `recorded a payment: ${nameOf.get(input.fromParticipantId)} paid ${nameOf.get(input.toParticipantId)}`,
-      data: { settlementId: settlement.id, amountMinor: input.amountMinor },
-    });
-    return settlement;
-  });
+  } catch (error) {
+    // Concurrent request with the same key won the insert: return its row.
+    if (input.idempotencyKey && isUniqueViolation(error, "idempotencyKey")) {
+      const winner = await prisma.settlement.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+      if (winner && winner.tripId === tripId) return winner;
+      throw AppError.conflict("Idempotency key already used", "IDEMPOTENCY_REUSE");
+    }
+    throw error;
+  }
 }
 
 /**

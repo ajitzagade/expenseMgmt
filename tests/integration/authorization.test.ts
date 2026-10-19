@@ -32,7 +32,7 @@ describe("authorization boundaries", () => {
     adminPid = (await prisma.participant.findFirstOrThrow({ where: { tripId, userId: admin.id } })).id;
     memberPid = (await prisma.participant.findFirstOrThrow({ where: { tripId, userId: member.id } })).id;
 
-    const expense = await createExpense(tripId, admin.id, {
+    const { expense } = await createExpense(tripId, admin.id, {
       title: "Admin's expense",
       amountMinor: 10000,
       category: "Food",
