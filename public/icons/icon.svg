@@ -1,5 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="112" fill="#176B5B"/>
-  <path d="M144 328 256 144l112 184" stroke="#E8DDC8" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <circle cx="256" cy="360" r="28" fill="#E8DDC8"/>
+  <!-- Coin ring with a sector missing at the top-right -->
+  <path d="M 386.7 240.8 A 150 150 0 1 1 271.2 125.3" fill="none" stroke="#E8DDC8" stroke-width="27" stroke-linecap="round"/>
+  <!-- The pulled-out share -->
+  <path d="M 240 272 L 271.2 125.3 A 150 150 0 0 1 386.7 240.8 Z" fill="#E8DDC8" transform="translate(36,-36)"/>
+  <!-- ₹ -->
+  <path d="M 198 254 h66 M 198 296 h66 M 208 254 l 42 76" fill="none" stroke="#E8DDC8" stroke-width="19" stroke-linecap="round"/>
 </svg>

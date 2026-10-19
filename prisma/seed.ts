@@ -97,7 +97,7 @@ interface ExpenseSpec {
   spentAt: Date;
   method?: SplitMethod;
   payers: [string, number][]; // [participant name, minor units]
-  split: (SplitParticipantInput & { name: string })[];
+  split: (Omit<SplitParticipantInput, "participantId"> & { name: string })[];
   merchant?: string;
   notes?: string;
 }
