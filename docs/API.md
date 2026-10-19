@@ -26,7 +26,7 @@ Conventions:
 | Method | Path | Body / query | Notes |
 | --- | --- | --- | --- |
 | GET | `/api/trips` | — | Trips for the current user with totals. |
-| POST | `/api/trips` | `{name, destination?, description?, startDate?, endDate?, currency, colorIndex, participantNames[]}` | Creator becomes ADMIN participant; names become guests. |
+| POST | `/api/trips` | `{name, destination?, description?, startDate?, endDate?, currency, colorIndex, participantNames[], companionUserIds[]}` | Creator becomes ADMIN participant; names become guests. `companionUserIds` pre-adds registered users as linked members — only allowed for people who already share a trip with the creator. |
 | GET | `/api/trips/:tripId` | — | Overview: trip, participants with balances, totals, category breakdown, recent activity. |
 | PATCH | `/api/trips/:tripId` | trip fields and/or `{status}` | Admin only. Closed trips accept only a status change (reopen). |
 

@@ -6,22 +6,47 @@ import { useState, type FormEvent } from "react";
 import { api, ApiError } from "@/lib/api-client";
 import { SUPPORTED_CURRENCIES, CURRENCY_INFO } from "@/domain/money";
 import { TRIP_COLORS } from "@/lib/format";
-import { Alert, Button, Field, Input, Select, cx } from "@/components/ui";
+import { Alert, Avatar, Badge, Button, Field, Input, Select, cx } from "@/components/ui";
 import { useToast } from "@/components/toast";
 
-export function NewTripForm({ defaultCurrency, userName }: { defaultCurrency: string; userName: string }) {
+export interface CompanionOption {
+  key: string;
+  name: string;
+  userId: string | null;
+}
+
+export function NewTripForm({
+  defaultCurrency,
+  userName,
+  companions,
+}: {
+  defaultCurrency: string;
+  userName: string;
+  companions: CompanionOption[];
+}) {
   const router = useRouter();
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [colorIndex, setColorIndex] = useState(0);
-  const [names, setNames] = useState<string[]>(["", "", ""]);
+  const [names, setNames] = useState<string[]>(companions.length > 0 ? [""] : ["", "", ""]);
+  const [selectedCompanions, setSelectedCompanions] = useState<Set<string>>(new Set());
+
+  function toggleCompanion(key: string) {
+    setSelectedCompanions((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     setBusy(true);
     setError(null);
+    const chosen = companions.filter((c) => selectedCompanions.has(c.key));
     try {
       const { trip } = await api<{ trip: { id: string } }>("/api/trips", {
         method: "POST",
@@ -32,7 +57,11 @@ export function NewTripForm({ defaultCurrency, userName }: { defaultCurrency: st
           endDate: form.get("endDate") || undefined,
           currency: form.get("currency"),
           colorIndex,
-          participantNames: names.map((n) => n.trim()).filter(Boolean),
+          companionUserIds: chosen.filter((c) => c.userId).map((c) => c.userId),
+          participantNames: [
+            ...chosen.filter((c) => !c.userId).map((c) => c.name),
+            ...names.map((n) => n.trim()).filter(Boolean),
+          ],
         },
       });
       toast("Trip created — add your first expense!");
@@ -91,8 +120,47 @@ export function NewTripForm({ defaultCurrency, userName }: { defaultCurrency: st
         </div>
       </fieldset>
 
+      {companions.length > 0 && (
+        <fieldset>
+          <legend className="text-sm font-medium text-ink">People you&apos;ve travelled with</legend>
+          <p className="mt-1 text-xs text-ink-soft">
+            Tap to add them to this trip. Registered members get access right away; guests come along by name.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {companions.map((c) => {
+              const selected = selectedCompanions.has(c.key);
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => toggleCompanion(c.key)}
+                  className={cx(
+                    "flex items-center gap-2 rounded-full border py-1 pr-3 pl-1 text-sm font-medium transition-colors",
+                    selected
+                      ? "border-primary bg-primary-soft text-primary"
+                      : "border-line bg-surface text-ink hover:border-primary/40",
+                  )}
+                >
+                  <Avatar name={c.name} size="sm" />
+                  {c.name}
+                  {c.userId && (
+                    <Badge tone={selected ? "primary" : "neutral"}>member</Badge>
+                  )}
+                  <span aria-hidden className={cx("text-xs", selected ? "text-primary" : "text-ink-soft")}>
+                    {selected ? "✓" : "+"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+      )}
+
       <fieldset>
-        <legend className="text-sm font-medium text-ink">Travel mates (optional)</legend>
+        <legend className="text-sm font-medium text-ink">
+          {companions.length > 0 ? "Add someone new (optional)" : "Travel mates (optional)"}
+        </legend>
         <p className="mt-1 text-xs text-ink-soft">
           Add people by name — no accounts needed. You ({userName}) are included automatically. You can invite or add more
           later.

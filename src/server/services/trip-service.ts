@@ -62,11 +62,63 @@ export interface TripCreateInput {
   currency: string;
   colorIndex: number;
   participantNames: string[];
+  /** Registered users from the creator's previous trips to add as members. */
+  companionUserIds?: string[];
+}
+
+/**
+ * People the user has travelled with before, for the new-trip multi-select.
+ * Registered companions are deduped by user id; guests by name.
+ */
+export async function getKnownCompanions(
+  userId: string,
+): Promise<{ key: string; name: string; userId: string | null }[]> {
+  const rows = await prisma.participant.findMany({
+    where: { trip: { participants: { some: { userId, isActive: true } } } },
+    select: { name: true, userId: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+  });
+  const byUser = new Map<string, string>();
+  const guestNames = new Map<string, string>();
+  for (const row of rows) {
+    if (row.userId === userId) continue;
+    if (row.userId) {
+      if (!byUser.has(row.userId)) byUser.set(row.userId, row.name);
+    } else if (!guestNames.has(row.name.toLowerCase())) {
+      guestNames.set(row.name.toLowerCase(), row.name);
+    }
+  }
+  // A guest entry that matches a registered companion's name is the same person.
+  const linkedNames = new Set([...byUser.values()].map((n) => n.toLowerCase()));
+  const companions = [
+    ...[...byUser.entries()].map(([id, name]) => ({ key: `user:${id}`, name, userId: id as string | null })),
+    ...[...guestNames.values()]
+      .filter((name) => !linkedNames.has(name.toLowerCase()))
+      .map((name) => ({ key: `guest:${name.toLowerCase()}`, name, userId: null as string | null })),
+  ];
+  return companions.sort((a, b) => a.name.localeCompare(b.name)).slice(0, 30);
 }
 
 export async function createTrip(user: { id: string; name: string }, input: TripCreateInput): Promise<Trip> {
   if (!isSupportedCurrency(input.currency)) throw AppError.badRequest("Unsupported currency");
-  const guestNames = dedupeNames(input.participantNames, user.name);
+  const companionIds = [...new Set(input.companionUserIds ?? [])].filter((id) => id !== user.id);
+  // Only people who already share a trip with the creator can be auto-added;
+  // anyone else must come through an invitation they accept themselves.
+  const companions =
+    companionIds.length > 0
+      ? await prisma.user.findMany({
+          where: {
+            id: { in: companionIds },
+            participants: { some: { trip: { participants: { some: { userId: user.id, isActive: true } } } } },
+          },
+          select: { id: true, name: true },
+        })
+      : [];
+  if (companions.length !== companionIds.length) {
+    throw AppError.badRequest("You can only pre-add people from your previous trips", "UNKNOWN_COMPANION");
+  }
+  const takenNames = [user.name, ...companions.map((c) => c.name)];
+  const guestNames = dedupeNames(input.participantNames, takenNames);
   return prisma.$transaction(async (tx) => {
     const trip = await tx.trip.create({
       data: {
@@ -82,6 +134,7 @@ export async function createTrip(user: { id: string; name: string }, input: Trip
         participants: {
           create: [
             { name: user.name, userId: user.id, role: "ADMIN" },
+            ...companions.map((c) => ({ name: c.name, userId: c.id })),
             ...guestNames.map((name) => ({ name })),
           ],
         },
@@ -97,8 +150,8 @@ export async function createTrip(user: { id: string; name: string }, input: Trip
   });
 }
 
-function dedupeNames(names: string[], creatorName: string): string[] {
-  const seen = new Set<string>([creatorName.toLowerCase()]);
+function dedupeNames(names: string[], takenNames: string[]): string[] {
+  const seen = new Set<string>(takenNames.map((n) => n.toLowerCase()));
   const result: string[] = [];
   for (const raw of names) {
     const name = raw.trim();

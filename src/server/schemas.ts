@@ -52,6 +52,8 @@ export const tripCreateSchema = z
     colorIndex: z.number().int().min(0).max(7).default(0),
     /** Guest participants to create alongside the trip, by display name. */
     participantNames: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
+    /** Registered users from the creator's previous trips to add as members. */
+    companionUserIds: z.array(z.string().cuid()).max(50).default([]),
   })
   .refine((t) => !t.startDate || !t.endDate || t.startDate <= t.endDate, {
     message: "End date cannot be before the start date",
