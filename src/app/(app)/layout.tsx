@@ -19,12 +19,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             <span className="text-base font-semibold tracking-tight text-ink max-sm:hidden">TripSplit</span>
           </Link>
           <nav className="flex items-center gap-1 text-sm" aria-label="Main">
-            <Link href="/trips" className="rounded-lg px-3 py-2 font-medium text-ink-soft hover:bg-line/50 hover:text-ink">
+            <Link href="/trips" className="rounded-lg px-3 py-2 font-semibold text-ink-soft hover:bg-line/50 hover:text-ink">
               Trips
             </Link>
             <Link
               href="/profile"
-              className="flex items-center gap-2 rounded-lg px-3 py-2 font-medium text-ink-soft hover:bg-line/50 hover:text-ink"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 font-semibold text-ink-soft hover:bg-line/50 hover:text-ink"
             >
               <Avatar name={user.name} size="sm" />
               <span className="max-sm:hidden">{user.name.split(" ")[0]}</span>

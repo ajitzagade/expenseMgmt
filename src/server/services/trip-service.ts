@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { prisma } from "@/lib/db";
 import { AppError } from "@/server/errors";
 import { isSupportedCurrency, type CurrencyCode } from "@/domain/money";
@@ -14,8 +15,10 @@ export interface TripAccess {
 /**
  * Resource-level authorization: every trip-scoped operation goes through one
  * of these. A user has access only through an active participant identity.
+ * Wrapped in React cache() so a layout and its page share one lookup per
+ * request instead of hitting the database twice.
  */
-export async function requireTripAccess(tripId: string, userId: string): Promise<TripAccess> {
+export const requireTripAccess = cache(async (tripId: string, userId: string): Promise<TripAccess> => {
   const participant = await prisma.participant.findFirst({
     where: { tripId, userId, isActive: true },
     include: { trip: true },
@@ -24,7 +27,7 @@ export async function requireTripAccess(tripId: string, userId: string): Promise
   if (!participant) throw AppError.notFound("Trip not found");
   const { trip, ...rest } = participant;
   return { trip, participant: rest as Participant, isAdmin: participant.role === "ADMIN" };
-}
+});
 
 export async function requireTripAdmin(tripId: string, userId: string): Promise<TripAccess> {
   const access = await requireTripAccess(tripId, userId);

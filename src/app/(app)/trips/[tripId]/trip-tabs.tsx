@@ -26,7 +26,7 @@ export function TripTabs({ tripId, isAdmin }: { tripId: string; isAdmin: boolean
               href={tab.href}
               aria-current={active ? "page" : undefined}
               className={cx(
-                "whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
+                "whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors",
                 active ? "border-primary text-primary" : "border-transparent text-ink-soft hover:text-ink",
               )}
             >
