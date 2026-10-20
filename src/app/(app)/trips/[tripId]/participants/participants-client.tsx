@@ -156,9 +156,9 @@ export function ParticipantActions({
 
   if (mode === "rename") {
     return (
-      <span className="flex items-center gap-2">
+      <span className="flex w-full flex-wrap items-center justify-end gap-2">
         {error && <span className="text-xs text-negative">{error}</span>}
-        <Input aria-label={`New name for ${name}`} className="h-8 w-32 text-sm" value={newName} maxLength={80} onChange={(e) => setNewName(e.target.value)} />
+        <Input aria-label={`New name for ${name}`} className="h-8 max-w-32 text-sm" value={newName} maxLength={80} onChange={(e) => setNewName(e.target.value)} />
         <Button
           size="sm"
           disabled={busy || !newName.trim()}
@@ -181,7 +181,7 @@ export function ParticipantActions({
 
   if (mode === "remove") {
     return (
-      <span className="flex items-center gap-2">
+      <span className="flex w-full flex-wrap items-center justify-end gap-2">
         {error && <span className="text-xs text-negative">{error}</span>}
         <span className="text-xs text-ink-soft">Remove {name}? Any expense history is kept.</span>
         <Button

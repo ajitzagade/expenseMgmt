@@ -25,7 +25,7 @@ export default async function ParticipantsPage({ params }: { params: Promise<{ t
         <h2 className="text-lg font-semibold text-ink">People on this trip</h2>
         <Card className="mt-3 divide-y divide-line">
           {active.map((p) => (
-            <div key={p.id} className="flex items-center gap-3 px-4 py-3">
+            <div key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
               <Avatar name={p.name} />
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-2 font-medium text-ink">
@@ -56,7 +56,7 @@ export default async function ParticipantsPage({ params }: { params: Promise<{ t
             </summary>
             <Card className="mt-2 divide-y divide-line">
               {inactive.map((p) => (
-                <div key={p.id} className="flex items-center gap-3 px-4 py-3 text-sm">
+                <div key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
                   <Avatar name={p.name} size="sm" />
                   <span className="flex-1 font-medium text-ink">{p.name}</span>
                   <Money minor={p.outstandingMinor} currency={currency} signed className="font-medium" />

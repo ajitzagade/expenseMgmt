@@ -9,7 +9,7 @@
  *  - /api/* and all non-GET requests: never touched by the cache. Financial
  *    reads and writes always go to the server.
  */
-const VERSION = "tripsplit-v3";
+const VERSION = "tripsplit-v4";
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_URL = "/offline.html";
 

@@ -206,11 +206,11 @@ export function ReverseSettlementButton({ tripId, settlementId }: { tripId: stri
     );
   }
   return (
-    <span className="flex flex-wrap items-center gap-2">
+    <span className="flex w-full flex-wrap items-center justify-end gap-2">
       {error && <span className="text-xs text-negative">{error}</span>}
       <Input
         aria-label="Reason for reversal"
-        className="h-8 w-44 text-sm"
+        className="h-8 max-w-44 text-sm"
         placeholder="Reason (required)"
         maxLength={300}
         value={reason}

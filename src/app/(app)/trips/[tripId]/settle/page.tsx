@@ -96,7 +96,7 @@ export default async function SettlePage({ params }: { params: Promise<{ tripId:
                     </span>
                   )}
                 </span>
-                <span className="flex items-center gap-3">
+                <span className="flex flex-wrap items-center justify-end gap-3">
                   <Money
                     minor={s.amountMinor}
                     currency={currency}

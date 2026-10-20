@@ -288,7 +288,7 @@ export function ExpenseForm({
                   aria-label={`Amount paid by ${p.name}`}
                   inputMode="decimal"
                   placeholder="0.00"
-                  className="w-28 text-right tnum"
+                  className="max-w-28 text-right tnum"
                   value={payerAmounts[p.id] ?? ""}
                   onChange={(e) => setPayerAmounts({ ...payerAmounts, [p.id]: e.target.value })}
                 />
@@ -384,7 +384,7 @@ export function ExpenseForm({
                     aria-label={`Exact amount for ${p.name}`}
                     inputMode="decimal"
                     placeholder="0.00"
-                    className="w-24 text-right tnum"
+                    className="max-w-24 text-right tnum"
                     value={pp.exact}
                     onChange={(e) => setPerson(p.id, { exact: e.target.value })}
                   />
@@ -395,7 +395,7 @@ export function ExpenseForm({
                       aria-label={`Percentage for ${p.name}`}
                       inputMode="decimal"
                       placeholder="0"
-                      className="w-16 text-right tnum"
+                      className="max-w-16 text-right tnum"
                       value={pp.percent}
                       onChange={(e) => setPerson(p.id, { percent: e.target.value })}
                     />
@@ -406,7 +406,7 @@ export function ExpenseForm({
                   <Input
                     aria-label={`Shares for ${p.name}`}
                     inputMode="numeric"
-                    className="w-16 text-right tnum"
+                    className="max-w-16 text-right tnum"
                     value={pp.shares}
                     onChange={(e) => setPerson(p.id, { shares: e.target.value })}
                   />
