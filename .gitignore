@@ -44,3 +44,9 @@ next-env.d.ts
 
 # Generated UI screenshots / preview page
 /shots
+test-results/
+playwright-report/
+
+# Playwright
+/test-results/
+/playwright-report/

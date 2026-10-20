@@ -37,6 +37,7 @@ Demo sign-ins after seeding: `ajit@example.com` / `password123` (trip admin) or 
 | `npm run build` / `npm start` | Production build / serve |
 | `npm test` | Unit tests (split, balance, settlement engines) |
 | `npm run test:integration` | Service-layer tests against `TEST_DATABASE_URL` (applies migrations, wipes data) |
+| `npm run test:e2e` | Browser E2E suite (Playwright) against a running build — see below |
 | `npm run typecheck` | Strict TypeScript check |
 | `npx prisma migrate dev` | Apply/create database migrations |
 | `npx prisma db seed` | Seed the demo trip (idempotent) |
