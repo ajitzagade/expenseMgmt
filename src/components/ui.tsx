@@ -11,7 +11,7 @@ export { cx };
 // ---------- Buttons ----------
 
 const buttonBase =
-  "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-[background-color,border-color,color,transform,box-shadow] duration-150 active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none select-none";
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-[background-color,border-color,color,transform,box-shadow] duration-150 active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none select-none";
 const buttonVariants = {
   primary: "bg-primary text-white hover:bg-primary-hover",
   secondary: "bg-surface text-ink border border-line hover:bg-primary-soft/60",
