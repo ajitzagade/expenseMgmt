@@ -3,6 +3,7 @@ import { cache } from "react";
 import { prisma } from "@/lib/db";
 import { AppError } from "@/server/errors";
 import { isSupportedCurrency, type CurrencyCode } from "@/domain/money";
+import { isTripOpen } from "@/lib/trip-status";
 import type { Participant, Trip, TripStatus } from "@/generated/prisma/client";
 import { logActivity } from "./activity";
 
@@ -37,7 +38,7 @@ export async function requireTripAdmin(tripId: string, userId: string): Promise<
 
 /** Writes to a completed/archived trip must first reopen it. */
 export function assertTripOpen(trip: Trip): void {
-  if (trip.status === "ARCHIVED" || trip.status === "COMPLETED") {
+  if (!isTripOpen(trip.status)) {
     throw AppError.conflict(
       "This trip is closed. Reopen it from trip settings to make changes.",
       "TRIP_CLOSED",
@@ -45,8 +46,10 @@ export function assertTripOpen(trip: Trip): void {
   }
 }
 
-function initialStatus(startDate?: string, endDate?: string): TripStatus {
-  const today = new Date().toISOString().slice(0, 10);
+function initialStatus(startDate?: string, endDate?: string, clientToday?: string): TripStatus {
+  // Prefer the creator's local calendar date (sent by the form) over the
+  // server's UTC date, so trips created near midnight classify correctly.
+  const today = clientToday ?? new Date().toISOString().slice(0, 10);
   if (startDate && startDate > today) return "UPCOMING";
   if (endDate && endDate < today) return "COMPLETED";
   if (startDate && startDate <= today) return "ONGOING";
@@ -64,6 +67,8 @@ export interface TripCreateInput {
   participantNames: string[];
   /** Registered users from the creator's previous trips to add as members. */
   companionUserIds?: string[];
+  /** The creator's local calendar date (YYYY-MM-DD) for status inference. */
+  clientToday?: string;
 }
 
 /**
@@ -77,6 +82,7 @@ export async function getKnownCompanions(
     where: { trip: { participants: { some: { userId, isActive: true } } } },
     select: { name: true, userId: true, createdAt: true },
     orderBy: { createdAt: "desc" },
+    take: 400, // bound the scan; recent history is what matters for the picker
   });
   const byUser = new Map<string, string>();
   const guestNames = new Map<string, string>();
@@ -129,7 +135,7 @@ export async function createTrip(user: { id: string; name: string }, input: Trip
         endDate: input.endDate ? new Date(input.endDate) : undefined,
         currency: input.currency,
         colorIndex: input.colorIndex,
-        status: initialStatus(input.startDate, input.endDate),
+        status: initialStatus(input.startDate, input.endDate, input.clientToday),
         createdById: user.id,
         participants: {
           create: [
@@ -183,9 +189,15 @@ export async function listTripsForUser(userId: string): Promise<TripSummary[]> {
     orderBy: [{ startDate: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
     include: {
       _count: { select: { participants: { where: { isActive: true } }, expenses: true } },
-      expenses: { select: { amountMinor: true } },
     },
   });
+  // One aggregate row per trip instead of loading every expense row.
+  const sums = await prisma.expense.groupBy({
+    by: ["tripId"],
+    where: { tripId: { in: trips.map((t) => t.id) } },
+    _sum: { amountMinor: true },
+  });
+  const totalByTrip = new Map(sums.map((s) => [s.tripId, s._sum.amountMinor ?? 0]));
   return trips.map((t) => ({
     id: t.id,
     name: t.name,
@@ -197,7 +209,7 @@ export async function listTripsForUser(userId: string): Promise<TripSummary[]> {
     colorIndex: t.colorIndex,
     participantCount: t._count.participants,
     expenseCount: t._count.expenses,
-    totalSpentMinor: t.expenses.reduce((a, e) => a + e.amountMinor, 0),
+    totalSpentMinor: totalByTrip.get(t.id) ?? 0,
   }));
 }
 

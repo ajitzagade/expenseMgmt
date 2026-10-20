@@ -108,6 +108,24 @@ export function ExpenseForm({
     setPerPerson((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
   }
 
+  // One split-input list drives BOTH the live preview and the submitted
+  // payload, so what the user confirms is exactly what the server receives.
+  const splitInputs = useMemo(
+    () =>
+      participants
+        .filter((p) => selected.has(p.id))
+        .map((p) => {
+          const pp = perPerson[p.id];
+          return {
+            participantId: p.id,
+            exactMinor: method === "EXACT" ? safeMinor(pp.exact, currency) : undefined,
+            percentBps: method === "PERCENTAGE" ? safeBps(pp.percent) : undefined,
+            shares: method === "SHARES" ? safeInt(pp.shares) : undefined,
+          };
+        }),
+    [participants, selected, perPerson, method, currency],
+  );
+
   // ---- Live preview: same engine the server runs on save. ----
   const preview = useMemo(() => {
     let amountMinor: number;
@@ -117,27 +135,14 @@ export function ExpenseForm({
       return { error: amount ? "Enter a valid amount, e.g. 1250 or 1250.50" : null, allocations: null, amountMinor: 0 };
     }
     if (amountMinor <= 0) return { error: null, allocations: null, amountMinor: 0 };
-    const chosen = participants.filter((p) => selected.has(p.id));
-    if (chosen.length === 0) return { error: "Select at least one person to share this expense", allocations: null, amountMinor };
+    if (splitInputs.length === 0) return { error: "Select at least one person to share this expense", allocations: null, amountMinor };
     try {
-      const allocations = computeSplit({
-        method,
-        amountMinor,
-        participants: chosen.map((p) => {
-          const pp = perPerson[p.id];
-          return {
-            participantId: p.id,
-            exactMinor: method === "EXACT" ? safeMinor(pp.exact, currency) : undefined,
-            percentBps: method === "PERCENTAGE" ? safeBps(pp.percent) : undefined,
-            shares: method === "SHARES" ? safeInt(pp.shares) : undefined,
-          };
-        }),
-      });
+      const allocations = computeSplit({ method, amountMinor, participants: splitInputs });
       return { error: null, allocations, amountMinor };
     } catch (e) {
       return { error: e instanceof DomainError ? e.message : "Check the split values", allocations: null, amountMinor };
     }
-  }, [amount, currency, method, participants, perPerson, selected]);
+  }, [amount, currency, method, splitInputs]);
 
   const payerTotalMinor = useMemo(() => {
     if (!multiPayer) return preview.amountMinor;
@@ -179,17 +184,7 @@ export function ExpenseForm({
         merchant: merchant.trim() || undefined,
         payers,
         splitMethod: method,
-        participants: participants
-          .filter((p) => selected.has(p.id))
-          .map((p) => {
-            const pp = perPerson[p.id];
-            return {
-              participantId: p.id,
-              ...(method === "EXACT" ? { exactMinor: safeMinor(pp.exact, currency) ?? 0 } : {}),
-              ...(method === "PERCENTAGE" ? { percentBps: safeBps(pp.percent) ?? 0 } : {}),
-              ...(method === "SHARES" ? { shares: safeInt(pp.shares) ?? 1 } : {}),
-            };
-          }),
+        participants: splitInputs,
       };
       if (initial) {
         await api(`/api/trips/${tripId}/expenses/${initial.id}`, { method: "PUT", json: body });

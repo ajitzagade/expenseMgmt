@@ -5,7 +5,7 @@ import { changePassword } from "@/server/services/auth-service";
 import { createSession, requireUser } from "@/lib/session";
 
 export const POST = withErrorHandling(async (req: NextRequest) => {
-  enforceRateLimit(req, "change-password", 10, 15 * 60 * 1000);
+  await enforceRateLimit(req, "change-password", 10, 15 * 60 * 1000);
   const user = await requireUser();
   const input = await parseBody(req, changePasswordSchema);
   await changePassword(user.id, input.currentPassword, input.newPassword);

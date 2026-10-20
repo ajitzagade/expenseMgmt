@@ -5,7 +5,7 @@ import { signUp } from "@/server/services/auth-service";
 import { createSession } from "@/lib/session";
 
 export const POST = withErrorHandling(async (req: NextRequest) => {
-  enforceRateLimit(req, "signup", 10, 15 * 60 * 1000);
+  await enforceRateLimit(req, "signup", 10, 15 * 60 * 1000);
   const input = await parseBody(req, signupSchema);
   const user = await signUp(input);
   await createSession(user.id);

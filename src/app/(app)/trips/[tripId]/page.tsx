@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeftRight, Plus } from "lucide-react";
 import { requireTripPage } from "@/lib/guards";
+import { isTripOpen } from "@/lib/trip-status";
 import { getTripOverview } from "@/server/services/balance-service";
 import { Avatar, Badge, ButtonLink, Card, EmptyState } from "@/components/ui";
 import { Money } from "@/components/money";
@@ -16,7 +17,7 @@ export default async function TripDashboardPage({ params }: { params: Promise<{ 
   const { trip } = overview;
   const currency = trip.currency;
   const activeParticipants = overview.participants.filter((p) => p.isActive);
-  const tripOpen = trip.status === "UPCOMING" || trip.status === "ONGOING";
+  const tripOpen = isTripOpen(trip.status);
 
   return (
     <div className="mt-6 space-y-6">

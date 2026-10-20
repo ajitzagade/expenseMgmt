@@ -20,11 +20,8 @@ export default async function ParticipantDetailPage({
   const { access } = await requireTripPage(tripId);
   const currency = access.trip.currency as CurrencyCode;
 
-  const financials = await getTripFinancials(tripId);
-  const person = financials.participants.find((p) => p.id === participantId);
-  if (!person) notFound();
-
-  const [allocations, contributions, settlements] = await Promise.all([
+  const [financials, allocations, contributions, settlements] = await Promise.all([
+    getTripFinancials(tripId),
     prisma.expenseAllocation.findMany({
       where: { participantId, expense: { tripId } },
       include: { expense: { select: { id: true, title: true, spentAt: true, category: true, amountMinor: true } } },
@@ -41,6 +38,9 @@ export default async function ParticipantDetailPage({
       orderBy: { paidAt: "desc" },
     }),
   ]);
+
+  const person = financials.participants.find((p) => p.id === participantId);
+  if (!person) notFound();
 
   return (
     <div className="mx-auto mt-6 max-w-2xl space-y-4">

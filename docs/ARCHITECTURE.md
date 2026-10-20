@@ -89,8 +89,9 @@ Greedy largest-debtor → largest-creditor matching over outstanding balances (`
 - Passwords: bcrypt (cost 12); login compares against a dummy hash when the email is unknown (no timing/enumeration signal); password reset never reveals account existence.
 - Authorization at the resource level: every trip-scoped operation resolves the caller's active Participant row first (`requireTripAccess` / `requireTripAdmin`); outsiders get 404, not 403, so trip ids can't be probed. Participant ids in payloads are re-verified against the trip.
 - Invite + reset tokens stored hashed; invites expire, are use-limited, revocable, and shown exactly once.
-- Validation: zod on every request body; Prisma parameterized queries (no SQL injection); React escaping (no XSS); SameSite cookies + JSON APIs (CSRF posture); fixed-window rate limiting on auth/invite endpoints (in-memory — swap for Redis when running >1 instance).
-- Headers: `nosniff`, `DENY` framing, restrictive referrer/permissions policies; `Cache-Control: no-store` on all API responses.
+- Validation: zod on every request body; Prisma parameterized queries (no SQL injection); React escaping (no XSS); SameSite cookies + JSON APIs (CSRF posture); fixed-window rate limiting on auth/invite endpoints backed by a Postgres bucket table, so limits hold across serverless instances and cold starts.
+- Headers: Content-Security-Policy (self-only scripts/connect targets, no framing), `nosniff`, `DENY` framing, restrictive referrer/permissions policies; `Cache-Control: no-store` on all API responses.
+- Emailed links use the configured `APP_URL`, never the request's Host header. `SESSION_SECRET` is fail-fast in production.
 - Logs never contain passwords, tokens, or session secrets. The audit log stores snapshots of financial changes only.
 
 ## PWA stance
@@ -108,4 +109,4 @@ Manifest + service worker with a deliberately conservative policy: static assets
 - Config via environment (`.env.example`); Prisma config in `prisma7.config.ts`.
 - Health: the app serves `/login` unauthenticated — use it (or add `/api/health`) for liveness probes.
 - Backup/recovery: scheduled `pg_dump`, restore + `prisma migrate deploy`; migrations are append-only and versioned in `prisma/migrations`.
-- Scaling path (when needed): move rate limiting to a shared store, add read replicas for report queries, extract nothing until a measurable driver appears.
+- Scaling path (when needed): add read replicas for report queries; extract nothing until a measurable driver appears.

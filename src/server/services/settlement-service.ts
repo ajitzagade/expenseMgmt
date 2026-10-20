@@ -18,6 +18,9 @@ export interface SettlementState {
 
 export async function getSettlementState(tripId: string): Promise<SettlementState> {
   const financials = await getTripFinancials(tripId);
+  // If the books ever fail to reconcile (should be impossible via the app),
+  // surface the fact instead of crashing the page with an engine error.
+  const suggestions = financials.reconciliationMinor === 0 ? suggestSettlements(financials.balances.values()) : [];
   const recorded = await prisma.settlement.findMany({
     where: { tripId },
     orderBy: { createdAt: "desc" },
@@ -28,7 +31,7 @@ export async function getSettlementState(tripId: string): Promise<SettlementStat
   });
   return {
     participants: financials.participants,
-    suggestions: suggestSettlements(financials.balances.values()),
+    suggestions,
     recorded: recorded.map(({ fromParticipant, toParticipant, ...s }) => ({
       ...s,
       fromName: fromParticipant.name,
@@ -116,6 +119,8 @@ export async function recordSettlement(tripId: string, userId: string, input: Re
  */
 export async function reverseSettlement(tripId: string, userId: string, settlementId: string, reason: string): Promise<Settlement> {
   const access = await requireTripAccess(tripId, userId);
+  // A closed trip's balances are final; reopen it to correct records.
+  assertTripOpen(access.trip);
   const settlement = await prisma.settlement.findFirst({ where: { id: settlementId, tripId } });
   if (!settlement) throw AppError.notFound("Payment not found");
   if (settlement.status === "REVERSED") throw AppError.conflict("This payment is already reversed", "ALREADY_REVERSED");

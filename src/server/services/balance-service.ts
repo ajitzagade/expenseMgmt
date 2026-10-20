@@ -34,28 +34,37 @@ export interface TripFinancials {
  * still counts; they are only excluded from NEW expenses.
  */
 export async function getTripFinancials(tripId: string): Promise<TripFinancials> {
-  const [participants, contributions, allocations, settlements, expenseAgg] = await Promise.all([
+  // Aggregated in the database: one row per participant (or settlement pair)
+  // regardless of how many expenses the trip has.
+  const [participants, contribSums, allocSums, settlementSums, expenseAgg] = await Promise.all([
     prisma.participant.findMany({ where: { tripId }, orderBy: { createdAt: "asc" } }),
-    prisma.expensePayerContribution.findMany({
+    prisma.expensePayerContribution.groupBy({
+      by: ["participantId"],
       where: { expense: { tripId } },
-      select: { participantId: true, amountMinor: true },
+      _sum: { amountMinor: true },
     }),
-    prisma.expenseAllocation.findMany({
+    prisma.expenseAllocation.groupBy({
+      by: ["participantId"],
       where: { expense: { tripId } },
-      select: { participantId: true, amountMinor: true },
+      _sum: { amountMinor: true },
     }),
-    prisma.settlement.findMany({
+    prisma.settlement.groupBy({
+      by: ["fromParticipantId", "toParticipantId"],
       where: { tripId, status: "CONFIRMED" },
-      select: { fromParticipantId: true, toParticipantId: true, amountMinor: true },
+      _sum: { amountMinor: true },
     }),
     prisma.expense.aggregate({ where: { tripId }, _sum: { amountMinor: true }, _count: true }),
   ]);
 
   const balances = computeBalances({
     participantIds: participants.map((p) => p.id),
-    contributions,
-    allocations,
-    settlements,
+    contributions: contribSums.map((r) => ({ participantId: r.participantId, amountMinor: r._sum.amountMinor ?? 0 })),
+    allocations: allocSums.map((r) => ({ participantId: r.participantId, amountMinor: r._sum.amountMinor ?? 0 })),
+    settlements: settlementSums.map((r) => ({
+      fromParticipantId: r.fromParticipantId,
+      toParticipantId: r.toParticipantId,
+      amountMinor: r._sum.amountMinor ?? 0,
+    })),
   });
 
   const withBalances: ParticipantWithBalance[] = participants.map((p) => {
@@ -105,17 +114,25 @@ export interface TripOverview {
   recentActivity: { id: string; type: string; message: string; actorName: string | null; createdAt: string }[];
 }
 
+/** Per-category totals, shared by the dashboard and the final report. */
+export async function getCategoryBreakdown(
+  tripId: string,
+): Promise<{ category: string; totalMinor: number; count: number }[]> {
+  const rows = await prisma.expense.groupBy({
+    by: ["category"],
+    where: { tripId },
+    _sum: { amountMinor: true },
+    _count: true,
+    orderBy: { _sum: { amountMinor: "desc" } },
+  });
+  return rows.map((c) => ({ category: c.category, totalMinor: c._sum.amountMinor ?? 0, count: c._count }));
+}
+
 export async function getTripOverview(tripId: string): Promise<TripOverview> {
-  const [trip, financials, categories, activity] = await Promise.all([
+  const [trip, financials, categoryBreakdown, activity] = await Promise.all([
     prisma.trip.findUniqueOrThrow({ where: { id: tripId } }),
     getTripFinancials(tripId),
-    prisma.expense.groupBy({
-      by: ["category"],
-      where: { tripId },
-      _sum: { amountMinor: true },
-      _count: true,
-      orderBy: { _sum: { amountMinor: "desc" } },
-    }),
+    getCategoryBreakdown(tripId),
     prisma.activityLog.findMany({
       where: { tripId },
       orderBy: { createdAt: "desc" },
@@ -140,11 +157,7 @@ export async function getTripOverview(tripId: string): Promise<TripOverview> {
     participants: financials.participants,
     totalSpentMinor: financials.totalSpentMinor,
     expenseCount: financials.expenseCount,
-    categoryBreakdown: categories.map((c) => ({
-      category: c.category,
-      totalMinor: c._sum.amountMinor ?? 0,
-      count: c._count,
-    })),
+    categoryBreakdown,
     recentActivity: activity.map((a) => ({
       id: a.id,
       type: a.type,

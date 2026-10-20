@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { BRAND } from "@/lib/brand";
 import { ServiceWorkerRegister } from "@/components/sw-register";
 import { ToastProvider } from "@/components/toast";
 
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#176B5B",
+  themeColor: BRAND.primary,
   width: "device-width",
   initialScale: 1,
 };

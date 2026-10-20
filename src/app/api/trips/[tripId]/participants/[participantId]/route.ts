@@ -1,21 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseBody, withErrorHandling } from "@/server/api";
-import { renameParticipantSchema } from "@/server/schemas";
+import { participantPatchSchema } from "@/server/schemas";
 import { reactivateParticipant, removeParticipant, renameParticipant } from "@/server/services/participant-service";
 import { requireUser } from "@/lib/session";
-import { z } from "zod";
 
 type Ctx = { params: Promise<{ tripId: string; participantId: string }> };
-
-const patchSchema = z.union([
-  renameParticipantSchema,
-  z.object({ reactivate: z.literal(true) }),
-]);
 
 export const PATCH = withErrorHandling(async (req: NextRequest, ctx: Ctx) => {
   const user = await requireUser();
   const { tripId, participantId } = await ctx.params;
-  const input = await parseBody(req, patchSchema);
+  const input = await parseBody(req, participantPatchSchema);
   const participant =
     "reactivate" in input
       ? await reactivateParticipant(tripId, user.id, participantId)

@@ -2,10 +2,8 @@ import type { ReactNode } from "react";
 import { requireTripPage } from "@/lib/guards";
 import { Badge } from "@/components/ui";
 import { TRIP_COLORS, formatDateRange } from "@/lib/format";
+import { TRIP_STATUS_META } from "@/lib/trip-status";
 import { TripTabs } from "./trip-tabs";
-
-const statusTone = { UPCOMING: "primary", ONGOING: "accent", COMPLETED: "neutral", ARCHIVED: "neutral" } as const;
-const statusLabel = { UPCOMING: "Upcoming", ONGOING: "Ongoing", COMPLETED: "Completed", ARCHIVED: "Archived" } as const;
 
 export default async function TripLayout({
   children,
@@ -28,7 +26,7 @@ export default async function TripLayout({
             style={{ backgroundColor: TRIP_COLORS[trip.colorIndex % TRIP_COLORS.length] }}
           />
           <h1 className="text-2xl font-semibold tracking-tight text-ink">{trip.name}</h1>
-          <Badge tone={statusTone[trip.status]}>{statusLabel[trip.status]}</Badge>
+          <Badge tone={TRIP_STATUS_META[trip.status].tone}>{TRIP_STATUS_META[trip.status].label}</Badge>
         </div>
         <p className="mt-1 text-sm text-ink-soft">
           {trip.destination ? `${trip.destination} · ` : ""}

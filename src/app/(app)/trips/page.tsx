@@ -6,11 +6,9 @@ import { listTripsForUser } from "@/server/services/trip-service";
 import { Badge, ButtonLink, Card, EmptyState } from "@/components/ui";
 import { Money } from "@/components/money";
 import { formatDateRange, TRIP_COLORS } from "@/lib/format";
+import { TRIP_STATUS_META } from "@/lib/trip-status";
 
 export const metadata: Metadata = { title: "Your trips" };
-
-const statusTone = { UPCOMING: "primary", ONGOING: "accent", COMPLETED: "neutral", ARCHIVED: "neutral" } as const;
-const statusLabel = { UPCOMING: "Upcoming", ONGOING: "Ongoing", COMPLETED: "Completed", ARCHIVED: "Archived" } as const;
 
 export default async function TripsPage() {
   const user = await requireUserPage();
@@ -55,7 +53,7 @@ export default async function TripsPage() {
                           {trip.destination && <p className="text-sm text-ink-soft">{trip.destination}</p>}
                         </div>
                       </div>
-                      <Badge tone={statusTone[trip.status]}>{statusLabel[trip.status]}</Badge>
+                      <Badge tone={TRIP_STATUS_META[trip.status].tone}>{TRIP_STATUS_META[trip.status].label}</Badge>
                     </div>
                     <p className="mt-3 text-sm text-ink-soft">{formatDateRange(trip.startDate, trip.endDate)}</p>
                     <div className="mt-4 flex items-end justify-between border-t border-line pt-3 text-sm text-ink-soft">

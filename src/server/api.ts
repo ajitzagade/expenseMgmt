@@ -1,3 +1,4 @@
+import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import type { ZodType } from "zod";
 import { DomainError } from "@/domain/money";
@@ -47,12 +48,14 @@ export async function parseBody<T>(req: NextRequest, schema: ZodType<T>): Promis
 }
 
 export function clientIp(req: NextRequest): string {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+  // x-real-ip is set by the platform (not client-forwardable on Vercel);
+  // fall back to the first x-forwarded-for hop, then a local marker.
+  return req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
 }
 
 /** Throws 429 when the caller exceeds `limit` requests per window. */
-export function enforceRateLimit(req: NextRequest, bucket: string, limit: number, windowMs: number): void {
-  const { ok, retryAfterSeconds } = rateLimit(`${bucket}:${clientIp(req)}`, limit, windowMs);
+export async function enforceRateLimit(req: NextRequest, bucket: string, limit: number, windowMs: number): Promise<void> {
+  const { ok, retryAfterSeconds } = await rateLimit(`${bucket}:${clientIp(req)}`, limit, windowMs);
   if (!ok) {
     throw new AppError(429, "RATE_LIMITED", `Too many attempts. Try again in ${retryAfterSeconds}s.`);
   }

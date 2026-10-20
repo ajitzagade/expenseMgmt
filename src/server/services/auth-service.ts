@@ -1,8 +1,9 @@
 import "server-only";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
-import { AppError } from "@/server/errors";
+import { AppError, isUniqueViolation } from "@/server/errors";
+import { sha256Hex } from "@/server/token";
 import { isSupportedCurrency } from "@/domain/money";
 import { sendMail } from "@/server/mailer";
 
@@ -29,10 +30,19 @@ export async function signUp(input: { email: string; password: string; name: str
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw AppError.conflict("An account with this email already exists", "EMAIL_TAKEN");
   const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
-  const user = await prisma.user.create({
-    data: { email, passwordHash, name: input.name.trim(), preferredCurrency: currency },
-  });
-  return toPublic(user);
+  try {
+    const user = await prisma.user.create({
+      data: { email, passwordHash, name: input.name.trim(), preferredCurrency: currency },
+    });
+    return toPublic(user);
+  } catch (error) {
+    // Concurrent duplicate signup: the loser of the unique-email race gets
+    // the same 409 the pre-check would have given, not a 500.
+    if (isUniqueViolation(error, "email")) {
+      throw AppError.conflict("An account with this email already exists", "EMAIL_TAKEN");
+    }
+    throw error;
+  }
 }
 
 export async function verifyLogin(email: string, password: string): Promise<PublicUser> {
@@ -49,13 +59,18 @@ export async function updateProfile(
   if (input.preferredCurrency !== undefined && !isSupportedCurrency(input.preferredCurrency)) {
     throw AppError.badRequest("Unsupported currency");
   }
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data: {
-      ...(input.name !== undefined ? { name: input.name.trim() } : {}),
-      ...(input.preferredCurrency !== undefined ? { preferredCurrency: input.preferredCurrency } : {}),
-    },
-  });
+  const name = input.name?.trim();
+  const [user] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(name !== undefined ? { name } : {}),
+        ...(input.preferredCurrency !== undefined ? { preferredCurrency: input.preferredCurrency } : {}),
+      },
+    }),
+    // Keep the per-trip display name in sync, as the profile page promises.
+    ...(name !== undefined ? [prisma.participant.updateMany({ where: { userId }, data: { name } })] : []),
+  ]);
   return toPublic(user);
 }
 
@@ -71,21 +86,20 @@ export async function changePassword(userId: string, currentPassword: string, ne
   ]);
 }
 
-function hashResetToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
-
 /**
  * Always succeeds from the caller's perspective (no account enumeration).
  * The reset link is delivered through the configured mailer; the development
  * mailer logs it to the server console.
  */
-export async function requestPasswordReset(email: string, appOrigin: string): Promise<void> {
+export async function requestPasswordReset(email: string, requestOrigin: string): Promise<void> {
+  // Never derive the emailed link from request headers: a configured APP_URL
+  // wins, so a spoofed Host cannot poison reset links.
+  const appOrigin = process.env.APP_URL ?? requestOrigin;
   const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
   if (!user) return;
   const token = randomBytes(32).toString("hex");
   await prisma.passwordResetToken.create({
-    data: { tokenHash: hashResetToken(token), userId: user.id, expiresAt: new Date(Date.now() + 30 * 60 * 1000) },
+    data: { tokenHash: sha256Hex(token), userId: user.id, expiresAt: new Date(Date.now() + 30 * 60 * 1000) },
   });
   const url = `${appOrigin}/reset-password?token=${token}`;
   await sendMail({
@@ -96,7 +110,7 @@ export async function requestPasswordReset(email: string, appOrigin: string): Pr
 }
 
 export async function resetPassword(token: string, newPassword: string): Promise<void> {
-  const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashResetToken(token) } });
+  const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash: sha256Hex(token) } });
   if (!record || record.usedAt || record.expiresAt < new Date()) {
     throw AppError.badRequest("This reset link is invalid or has expired", "INVALID_RESET_TOKEN");
   }

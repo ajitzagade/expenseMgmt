@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { requireTripPage } from "@/lib/guards";
+import { isTripOpen } from "@/lib/trip-status";
 import { getSettlementState } from "@/server/services/settlement-service";
 import { Avatar, Badge, Card, EmptyState } from "@/components/ui";
 import { Money } from "@/components/money";
@@ -13,10 +14,14 @@ export default async function SettlePage({ params }: { params: Promise<{ tripId:
   const { tripId } = await params;
   const { access } = await requireTripPage(tripId);
   const currency = access.trip.currency as CurrencyCode;
-  const tripOpen = access.trip.status === "UPCOMING" || access.trip.status === "ONGOING";
+  const tripOpen = isTripOpen(access.trip.status);
   const state = await getSettlementState(tripId);
   const unsettled = state.participants.filter((p) => p.status !== "settled");
-  const activeParticipants = state.participants.filter((p) => p.isActive);
+  // The payment form must cover everyone a suggestion can reference —
+  // including removed participants, whose debts are still real.
+  const formParticipants = state.participants
+    .filter((p) => p.isActive || p.outstandingMinor !== 0)
+    .map((p) => ({ id: p.id, name: p.isActive ? p.name : `${p.name} (left trip)` }));
 
   return (
     <div className="mt-6 space-y-6">
@@ -56,7 +61,7 @@ export default async function SettlePage({ params }: { params: Promise<{ tripId:
             tripId={tripId}
             currency={currency}
             canRecord={tripOpen}
-            participants={activeParticipants.map((p) => ({ id: p.id, name: p.name }))}
+            participants={formParticipants}
             suggestions={state.suggestions.map((s) => ({
               fromParticipantId: s.fromParticipantId,
               toParticipantId: s.toParticipantId,

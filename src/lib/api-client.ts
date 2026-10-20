@@ -1,5 +1,10 @@
 "use client";
 
+/** Only same-origin absolute paths are safe post-auth redirect targets. */
+export function safeInternalPath(path: string | null): string | null {
+  return path && path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\") ? path : null;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -33,6 +38,11 @@ export async function api<T>(path: string, options?: RequestInit & { json?: unkn
       code = data.error?.code;
     } catch {
       // Non-JSON error body: keep the generic message.
+    }
+    // An expired session is a dead end inside any form: send the user to
+    // sign-in with a way back, instead of an inline error they can't act on.
+    if (res.status === 401 && !path.startsWith("/api/auth/")) {
+      window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname)}`);
     }
     throw new ApiError(message, res.status, code);
   }

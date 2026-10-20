@@ -55,13 +55,16 @@ export async function renameParticipant(
 }
 
 async function hasFinancialRecords(participantId: string): Promise<boolean> {
-  const [contrib, alloc, from, to] = await Promise.all([
+  const [contrib, alloc, from, to, created] = await Promise.all([
     prisma.expensePayerContribution.count({ where: { participantId } }),
     prisma.expenseAllocation.count({ where: { participantId } }),
     prisma.settlement.count({ where: { fromParticipantId: participantId } }),
     prisma.settlement.count({ where: { toParticipantId: participantId } }),
+    // Created expenses hold a Restrict FK to the participant: they are
+    // financial history too, and hard-deleting would violate the constraint.
+    prisma.expense.count({ where: { createdByParticipantId: participantId } }),
   ]);
-  return contrib + alloc + from + to > 0;
+  return contrib + alloc + from + to + created > 0;
 }
 
 /**

@@ -9,7 +9,7 @@
  *  - /api/* and all non-GET requests: never touched by the cache. Financial
  *    reads and writes always go to the server.
  */
-const VERSION = "tripsplit-v2";
+const VERSION = "tripsplit-v3";
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_URL = "/offline.html";
 
@@ -52,7 +52,10 @@ self.addEventListener("fetch", (event) => {
           fetch(request).then((response) => {
             if (response.ok) {
               const copy = response.clone();
-              caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
+              caches.open(STATIC_CACHE).then(async (cache) => {
+                await cache.put(request, copy);
+                trimCache(cache);
+              });
             }
             return response;
           }),
@@ -65,3 +68,12 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL)));
   }
 });
+
+// Old content-hashed chunks accumulate across deploys; keep the cache bounded.
+const MAX_STATIC_ENTRIES = 120;
+async function trimCache(cache) {
+  const keys = await cache.keys();
+  for (let i = 0; i < keys.length - MAX_STATIC_ENTRIES; i++) {
+    await cache.delete(keys[i]);
+  }
+}

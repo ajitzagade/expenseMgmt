@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireTripPage } from "@/lib/guards";
+import { isTripOpen } from "@/lib/trip-status";
 import { getTripFinancials } from "@/server/services/balance-service";
 import { Avatar, Badge, Card } from "@/components/ui";
 import { Money } from "@/components/money";
@@ -13,7 +14,7 @@ export default async function ParticipantsPage({ params }: { params: Promise<{ t
   const { tripId } = await params;
   const { access } = await requireTripPage(tripId);
   const currency = access.trip.currency as CurrencyCode;
-  const tripOpen = access.trip.status === "UPCOMING" || access.trip.status === "ONGOING";
+  const tripOpen = isTripOpen(access.trip.status);
   const financials = await getTripFinancials(tripId);
   const active = financials.participants.filter((p) => p.isActive);
   const inactive = financials.participants.filter((p) => !p.isActive);

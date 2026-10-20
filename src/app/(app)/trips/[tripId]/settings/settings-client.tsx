@@ -4,8 +4,8 @@ import { Archive, Check, Flag, Play, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { api, ApiError } from "@/lib/api-client";
-import { TRIP_COLORS } from "@/lib/format";
-import { Alert, Button, Field, Input, Textarea, cx } from "@/components/ui";
+import { Alert, Button, Field, Input, Textarea } from "@/components/ui";
+import { TripColorPicker } from "@/components/trip-color-picker";
 import { useToast } from "@/components/toast";
 import type { TripStatus } from "@/generated/prisma/enums";
 
@@ -65,25 +65,7 @@ export function TripSettingsForm({
           <Input id="endDate" name="endDate" type="date" defaultValue={initial.endDate} />
         </Field>
       </div>
-      <fieldset>
-        <legend className="text-sm font-medium text-ink">Trip color</legend>
-        <div className="mt-2 flex gap-2">
-          {TRIP_COLORS.map((color, i) => (
-            <button
-              key={color}
-              type="button"
-              aria-label={`Color ${i + 1}`}
-              aria-pressed={colorIndex === i}
-              onClick={() => setColorIndex(i)}
-              className={cx(
-                "size-8 rounded-full border-2",
-                colorIndex === i ? "scale-110 border-ink" : "border-transparent hover:scale-105",
-              )}
-              style={{ backgroundColor: color }}
-            />
-          ))}
-        </div>
-      </fieldset>
+      <TripColorPicker value={colorIndex} onChange={setColorIndex} />
       <Button type="submit" disabled={state.busy}>
         <Check className="size-4" aria-hidden />
         {state.busy ? "Saving…" : "Save changes"}

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { requireTripPage } from "@/lib/guards";
+import { isTripOpen } from "@/lib/trip-status";
 import { Alert, Card } from "@/components/ui";
 import { TripSettingsForm, TripStatusControls } from "./settings-client";
 
@@ -18,7 +19,7 @@ export default async function TripSettingsPage({ params }: { params: Promise<{ t
     );
   }
 
-  const closed = trip.status === "COMPLETED" || trip.status === "ARCHIVED";
+  const closed = !isTripOpen(trip.status);
 
   return (
     <div className="mx-auto mt-6 max-w-xl space-y-6">

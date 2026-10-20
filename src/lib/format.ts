@@ -1,12 +1,24 @@
-import { CURRENCY_INFO, formatMinor, type CurrencyCode } from "@/domain/money";
-
-export { formatMinor, CURRENCY_INFO };
-export type { CurrencyCode };
+/**
+ * Date-only values (trip dates, YYYY-MM-DD strings, or Dates at UTC midnight
+ * from @db.Date columns) are rendered in UTC so the calendar date never
+ * shifts with the viewer's timezone. Real timestamps render in local time.
+ */
+function isDateOnly(value: string | Date): boolean {
+  if (typeof value === "string") return /^\d{4}-\d{2}-\d{2}$/.test(value);
+  return (
+    value.getUTCHours() === 0 && value.getUTCMinutes() === 0 && value.getUTCSeconds() === 0 && value.getUTCMilliseconds() === 0
+  );
+}
 
 export function formatDate(value: string | Date | null | undefined): string {
   if (!value) return "—";
   const date = typeof value === "string" ? new Date(value) : value;
-  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    ...(isDateOnly(value) ? { timeZone: "UTC" } : {}),
+  });
 }
 
 export function formatDateTime(value: string | Date): string {
@@ -46,4 +58,9 @@ export function initials(name: string): string {
     .slice(0, 2)
     .map((w) => w[0]!.toUpperCase())
     .join("");
+}
+
+/** The creator's local calendar date, for status inference at trip creation. */
+export function localToday(): string {
+  return new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { requireTripPage } from "@/lib/guards";
+import { isTripOpen } from "@/lib/trip-status";
 import { prisma } from "@/lib/db";
 import { Alert, Card } from "@/components/ui";
 import type { CurrencyCode } from "@/domain/money";
@@ -10,7 +11,7 @@ export const metadata: Metadata = { title: "Add expense" };
 export default async function NewExpensePage({ params }: { params: Promise<{ tripId: string }> }) {
   const { tripId } = await params;
   const { access } = await requireTripPage(tripId);
-  const closed = access.trip.status === "COMPLETED" || access.trip.status === "ARCHIVED";
+  const closed = !isTripOpen(access.trip.status);
   const participants = await prisma.participant.findMany({
     where: { tripId, isActive: true },
     orderBy: { createdAt: "asc" },

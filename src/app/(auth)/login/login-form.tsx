@@ -4,7 +4,7 @@ import { LogIn } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
-import { api, ApiError } from "@/lib/api-client";
+import { api, ApiError, safeInternalPath } from "@/lib/api-client";
 import { Alert, Button, Field, Input } from "@/components/ui";
 
 export function LoginForm() {
@@ -28,7 +28,7 @@ function LoginFormInner() {
     setError(null);
     try {
       await api("/api/auth/login", { method: "POST", json: { email: form.get("email"), password: form.get("password") } });
-      router.push(next && next.startsWith("/") ? next : "/trips");
+      router.push(safeInternalPath(next) ?? "/trips");
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");

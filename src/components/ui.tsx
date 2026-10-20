@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import { TRIP_COLORS, initials } from "@/lib/format";
 
 function cx(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(" ");
@@ -157,23 +158,16 @@ export function Spinner({ label = "Loading…" }: { label?: string }) {
   );
 }
 
-export function Avatar({ name, colorIndex = 0, size = "md" }: { name: string; colorIndex?: number; size?: "sm" | "md" | "lg" }) {
-  const palette = ["#176B5B", "#8A7A58", "#4A6FA5", "#B5473C", "#6B5B95", "#2E7D6B", "#A3623B", "#54707A"];
-  const color = palette[Math.abs(hashCode(name) + colorIndex) % palette.length];
+export function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) {
+  const color = TRIP_COLORS[Math.abs(hashCode(name)) % TRIP_COLORS.length];
   const sizes = { sm: "size-6 text-[10px]", md: "size-8 text-xs", lg: "size-10 text-sm" } as const;
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]!.toUpperCase())
-    .join("");
   return (
     <span
       aria-hidden
       className={cx("inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white", sizes[size])}
       style={{ backgroundColor: color }}
     >
-      {initials}
+      {initials(name)}
     </span>
   );
 }

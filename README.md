@@ -67,7 +67,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design (ERD, modul
 
 - Any Node host works (Vercel, Fly, a VM). Set `DATABASE_URL` and `SESSION_SECRET`; run `npx prisma migrate deploy` on release; serve over HTTPS.
 - Backups: use `pg_dump` on a schedule (e.g. `pg_dump "$DATABASE_URL" | gzip > tripsplit-$(date +%F).sql.gz`); restore with `psql < dump.sql` followed by `npx prisma migrate deploy` to verify schema state. Test restores regularly.
-- The in-memory rate limiter assumes a single instance; put a shared store behind it before scaling horizontally (documented in ARCHITECTURE.md).
+- Rate limiting is Postgres-backed (shared across serverless instances). Set `APP_URL` in production so emailed links (password reset) use the canonical origin.
 
 ## Known limitations / deferred features
 

@@ -1,6 +1,6 @@
+import "server-only";
 import { z } from "zod";
 import { SUPPORTED_CURRENCIES } from "@/domain/money";
-import { SPLIT_METHODS } from "@/domain/split";
 
 /** Shared request schemas, used by API routes (and mirrored by UI forms). */
 
@@ -54,6 +54,8 @@ export const tripCreateSchema = z
     participantNames: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
     /** Registered users from the creator's previous trips to add as members. */
     companionUserIds: z.array(z.string().cuid()).max(50).default([]),
+    /** The creator's local calendar date, for initial status inference. */
+    clientToday: isoDate.optional(),
   })
   .refine((t) => !t.startDate || !t.endDate || t.startDate <= t.endDate, {
     message: "End date cannot be before the start date",
@@ -79,6 +81,9 @@ export const tripUpdateSchema = z
 
 export const addParticipantSchema = z.object({ name: z.string().trim().min(1, "Name is required").max(80) });
 export const renameParticipantSchema = addParticipantSchema;
+
+/** PATCH /participants/:id — rename a guest, or reactivate a removed member. */
+export const participantPatchSchema = z.union([renameParticipantSchema, z.object({ reactivate: z.literal(true) })]);
 
 export const createInvitationSchema = z.object({
   /** Optional guest participant this invite should claim when accepted. */
@@ -117,18 +122,13 @@ export const expenseWriteSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
   merchant: z.string().trim().max(120).optional(),
   payers: z.array(z.object({ participantId: z.string().cuid(), amountMinor })).min(1).max(50),
-  splitMethod: z.enum(SPLIT_METHODS),
+  /** CUSTOM is a legacy storage alias of EXACT; writes use the four real methods. */
+  splitMethod: z.enum(["EQUAL", "EXACT", "PERCENTAGE", "SHARES"]),
   participants: z.array(splitParticipantSchema).min(1, "Select at least one participant").max(50),
 });
 
 /** Creation accepts a client idempotency key; updates are naturally idempotent. */
 export const expenseCreateSchema = expenseWriteSchema.extend({ idempotencyKey: z.uuid().optional() });
-
-export const splitPreviewSchema = z.object({
-  amountMinor,
-  splitMethod: z.enum(SPLIT_METHODS),
-  participants: z.array(splitParticipantSchema).min(1).max(50),
-});
 
 // ---------- Settlements ----------
 

@@ -53,6 +53,13 @@ model Session {
   @@index([userId])
 }
 
+/// Fixed-window rate-limit buckets, shared across serverless instances.
+model RateLimitBucket {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+}
+
 model PasswordResetToken {
   id        String    @id @default(cuid())
   tokenHash String    @unique

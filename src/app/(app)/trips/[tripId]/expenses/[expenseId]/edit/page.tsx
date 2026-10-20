@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireTripPage } from "@/lib/guards";
+import { isTripOpen } from "@/lib/trip-status";
 import { prisma } from "@/lib/db";
 import { getExpense } from "@/server/services/expense-service";
 import { AppError } from "@/server/errors";
@@ -17,7 +18,7 @@ export default async function EditExpensePage({ params }: { params: Promise<{ tr
     if (e instanceof AppError && e.status === 404) notFound();
     throw e;
   });
-  const closed = access.trip.status === "COMPLETED" || access.trip.status === "ARCHIVED";
+  const closed = !isTripOpen(access.trip.status);
   const canEdit = access.isAdmin || expense.createdByParticipantId === access.participant.id;
   const participants = await prisma.participant.findMany({
     where: { tripId, isActive: true },

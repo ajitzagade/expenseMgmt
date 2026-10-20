@@ -1,4 +1,4 @@
-import { DomainError } from "@/domain/money";
+import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -51,11 +51,4 @@ export function isUniqueViolation(error: unknown, column: string): boolean {
   if (typeof cause?.constraint?.index === "string") return cause.constraint.index.includes(column);
   if (Array.isArray(cause?.constraint?.fields)) return cause.constraint.fields.includes(column);
   return false;
-}
-
-/** Converts domain validation failures into 400s; rethrows anything else. */
-export function toAppError(error: unknown): AppError {
-  if (error instanceof AppError) return error;
-  if (error instanceof DomainError) return new AppError(400, error.code, error.message);
-  throw error;
 }

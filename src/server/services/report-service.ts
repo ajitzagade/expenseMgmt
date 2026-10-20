@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { suggestSettlements, type SuggestedTransfer } from "@/domain/settlement";
 import { formatMinor, type CurrencyCode } from "@/domain/money";
-import { getTripFinancials, type ParticipantWithBalance } from "./balance-service";
+import { getCategoryBreakdown, getTripFinancials, type ParticipantWithBalance } from "./balance-service";
 
 export interface TripReport {
   trip: {
@@ -33,7 +33,7 @@ export interface TripReport {
 }
 
 export async function getTripReport(tripId: string): Promise<TripReport> {
-  const [trip, financials, expenses, categories, settlements] = await Promise.all([
+  const [trip, financials, expenses, categoryBreakdown, settlements] = await Promise.all([
     prisma.trip.findUniqueOrThrow({ where: { id: tripId } }),
     getTripFinancials(tripId),
     prisma.expense.findMany({
@@ -44,13 +44,7 @@ export async function getTripReport(tripId: string): Promise<TripReport> {
         allocations: { include: { participant: { select: { name: true } } } },
       },
     }),
-    prisma.expense.groupBy({
-      by: ["category"],
-      where: { tripId },
-      _sum: { amountMinor: true },
-      _count: true,
-      orderBy: { _sum: { amountMinor: "desc" } },
-    }),
+    getCategoryBreakdown(tripId),
     prisma.settlement.findMany({
       where: { tripId, status: "CONFIRMED" },
       orderBy: { paidAt: "asc" },
@@ -59,7 +53,7 @@ export async function getTripReport(tripId: string): Promise<TripReport> {
   ]);
 
   const nameOf = new Map(financials.participants.map((p) => [p.id, p.name]));
-  const suggestions = suggestSettlements(financials.balances.values());
+  const suggestions = financials.reconciliationMinor === 0 ? suggestSettlements(financials.balances.values()) : [];
 
   return {
     trip: {
@@ -75,11 +69,7 @@ export async function getTripReport(tripId: string): Promise<TripReport> {
     participants: financials.participants,
     totalSpentMinor: financials.totalSpentMinor,
     expenseCount: financials.expenseCount,
-    categoryBreakdown: categories.map((c) => ({
-      category: c.category,
-      totalMinor: c._sum.amountMinor ?? 0,
-      count: c._count,
-    })),
+    categoryBreakdown,
     expenses: expenses.map((e) => ({
       id: e.id,
       title: e.title,
@@ -104,7 +94,12 @@ export async function getTripReport(tripId: string): Promise<TripReport> {
 }
 
 function csvEscape(value: string | number): string {
-  const s = String(value);
+  let s = String(value);
+  // Neutralize spreadsheet formula injection: a leading =, @, or a +/- that
+  // is not a plain number gets a quote prefix so Excel/Sheets treat it as text.
+  if (/^[=@]/.test(s) || (/^[+-]/.test(s) && !/^[+-]?\d+(\.\d+)?$/.test(s))) {
+    s = `'${s}`;
+  }
   return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
 

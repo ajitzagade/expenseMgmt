@@ -26,7 +26,7 @@ Conventions:
 | Method | Path | Body / query | Notes |
 | --- | --- | --- | --- |
 | GET | `/api/trips` | — | Trips for the current user with totals. |
-| POST | `/api/trips` | `{name, destination?, description?, startDate?, endDate?, currency, colorIndex, participantNames[], companionUserIds[]}` | Creator becomes ADMIN participant; names become guests. `companionUserIds` pre-adds registered users as linked members — only allowed for people who already share a trip with the creator. |
+| POST | `/api/trips` | `{name, destination?, description?, startDate?, endDate?, currency, colorIndex, participantNames[], companionUserIds[], clientToday?}` | Creator becomes ADMIN participant; names become guests. `companionUserIds` pre-adds registered users as linked members — only allowed for people who already share a trip with the creator. |
 | GET | `/api/trips/:tripId` | — | Overview: trip, participants with balances, totals, category breakdown, recent activity. |
 | PATCH | `/api/trips/:tripId` | trip fields and/or `{status}` | Admin only. Closed trips accept only a status change (reopen). |
 
@@ -48,11 +48,12 @@ Conventions:
 | Method | Path | Body / query | Notes |
 | --- | --- | --- | --- |
 | GET | `/api/trips/:tripId/expenses` | `?category&participantId&payerId&q&cursor&limit` | Cursor pagination, newest first. |
-| POST | `/api/trips/:tripId/expenses` | see below | Member. Atomic create. |
+| POST | `/api/trips/:tripId/expenses` | see below | Member. Atomic create; accepts `idempotencyKey` (201 on create, 200 on replay). |
 | GET | `/api/trips/:tripId/expenses/:id` | — | Full detail with payers + allocations. |
 | PUT | `/api/trips/:tripId/expenses/:id` | same as create | Creator or admin. Replaces payers/allocations atomically; audited. |
 | DELETE | `/api/trips/:tripId/expenses/:id` | — | Creator or admin; audited with snapshot. |
-| POST | `/api/trips/:tripId/expenses/preview` | `{amountMinor, splitMethod, participants[]}` | Authoritative split preview (no write). |
+
+A `401` from any non-auth endpoint means the session expired; the web client redirects to `/login?next=…`.
 
 Expense write body:
 
@@ -64,7 +65,7 @@ Expense write body:
   "spentAt": "2026-11-07T20:00:00+05:30",
   "notes": "optional", "merchant": "optional",
   "payers": [ {"participantId": "...", "amountMinor": 120000} ],   // 1..n, must sum to amountMinor
-  "splitMethod": "EQUAL",             // EQUAL | EXACT | PERCENTAGE | SHARES | CUSTOM
+  "splitMethod": "EQUAL",             // EQUAL | EXACT | PERCENTAGE | SHARES
   "participants": [                   // who shares it — independent of payers
     {"participantId": "..."},                          // EQUAL
     {"participantId": "...", "exactMinor": 60000},     // EXACT/CUSTOM

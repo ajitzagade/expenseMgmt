@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Plus, SlidersHorizontal } from "lucide-react";
 import { requireTripPage } from "@/lib/guards";
+import { isTripOpen } from "@/lib/trip-status";
 import { prisma } from "@/lib/db";
 import { listExpenses } from "@/server/services/expense-service";
 import { Avatar, ButtonLink, Card, EmptyState } from "@/components/ui";
@@ -17,23 +18,24 @@ export default async function ExpensesPage({
   searchParams,
 }: {
   params: Promise<{ tripId: string }>;
-  searchParams: Promise<{ category?: string; participantId?: string; payerId?: string; q?: string; cursor?: string }>;
+  searchParams: Promise<{ category?: string; participantId?: string; payerId?: string; q?: string; show?: string }>;
 }) {
   const { tripId } = await params;
-  const filters = await searchParams;
+  const { show, ...filters } = await searchParams;
+  // "Show older" grows the page size instead of replacing the list, so
+  // earlier expenses never vanish. Capped to keep the query bounded.
+  const limit = Math.min(Math.max(Number(show) || 25, 25), 200);
   const { access } = await requireTripPage(tripId);
   const currency = access.trip.currency as CurrencyCode;
-  const tripOpen = access.trip.status === "UPCOMING" || access.trip.status === "ONGOING";
+  const tripOpen = isTripOpen(access.trip.status);
 
   const [participants, { expenses, nextCursor }] = await Promise.all([
     prisma.participant.findMany({ where: { tripId }, orderBy: { createdAt: "asc" }, select: { id: true, name: true } }),
-    listExpenses(tripId, filters),
+    listExpenses(tripId, { ...filters, limit }),
   ]);
 
   const hasFilters = Boolean(filters.category || filters.participantId || filters.payerId || filters.q);
-  const query = new URLSearchParams(
-    Object.entries(filters).filter(([k, v]) => k !== "cursor" && typeof v === "string" && v) as [string, string][],
-  );
+  const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => typeof v === "string" && v) as [string, string][]);
 
   return (
     <div className="mt-6">
@@ -131,15 +133,18 @@ export default async function ExpensesPage({
         </Card>
       )}
 
-      {nextCursor && (
+      {nextCursor && limit < 200 && (
         <div className="mt-4 text-center">
           <Link
-            href={`/trips/${tripId}/expenses?${new URLSearchParams([...query.entries(), ["cursor", nextCursor]]).toString()}`}
+            href={`/trips/${tripId}/expenses?${new URLSearchParams([...query.entries(), ["show", String(limit + 25)]]).toString()}`}
             className="text-sm font-medium text-primary hover:text-primary-hover"
           >
-            Load older expenses →
+            Show older expenses →
           </Link>
         </div>
+      )}
+      {nextCursor && limit >= 200 && (
+        <p className="mt-4 text-center text-sm text-ink-soft">Showing the latest 200 — use the filters to find older expenses.</p>
       )}
     </div>
   );

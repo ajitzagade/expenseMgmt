@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { api, ApiError } from "@/lib/api-client";
 import { SUPPORTED_CURRENCIES, CURRENCY_INFO } from "@/domain/money";
-import { TRIP_COLORS } from "@/lib/format";
 import { Alert, Avatar, Badge, Button, Field, Input, Select, cx } from "@/components/ui";
+import { TripColorPicker } from "@/components/trip-color-picker";
+import { localToday } from "@/lib/format";
 import { useToast } from "@/components/toast";
 
 export interface CompanionOption {
@@ -57,6 +58,7 @@ export function NewTripForm({
           endDate: form.get("endDate") || undefined,
           currency: form.get("currency"),
           colorIndex,
+          clientToday: localToday(),
           companionUserIds: chosen.filter((c) => c.userId).map((c) => c.userId),
           participantNames: [
             ...chosen.filter((c) => !c.userId).map((c) => c.name),
@@ -100,25 +102,7 @@ export function NewTripForm({
         </Select>
       </Field>
 
-      <fieldset>
-        <legend className="text-sm font-medium text-ink">Trip color</legend>
-        <div className="mt-2 flex gap-2">
-          {TRIP_COLORS.map((color, i) => (
-            <button
-              key={color}
-              type="button"
-              aria-label={`Color ${i + 1}`}
-              aria-pressed={colorIndex === i}
-              onClick={() => setColorIndex(i)}
-              className={cx(
-                "size-8 rounded-full border-2 transition-transform",
-                colorIndex === i ? "scale-110 border-ink" : "border-transparent hover:scale-105",
-              )}
-              style={{ backgroundColor: color }}
-            />
-          ))}
-        </div>
-      </fieldset>
+      <TripColorPicker value={colorIndex} onChange={setColorIndex} />
 
       {companions.length > 0 && (
         <fieldset>

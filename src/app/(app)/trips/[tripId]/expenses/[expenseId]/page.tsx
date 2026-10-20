@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { requireTripPage } from "@/lib/guards";
+import { isTripOpen } from "@/lib/trip-status";
 import { getExpense } from "@/server/services/expense-service";
 import { AppError } from "@/server/errors";
 import { Avatar, Badge, ButtonLink, Card } from "@/components/ui";
@@ -28,7 +29,7 @@ export default async function ExpenseDetailPage({ params }: { params: Promise<{ 
     throw e;
   });
   const currency = access.trip.currency as CurrencyCode;
-  const tripOpen = access.trip.status === "UPCOMING" || access.trip.status === "ONGOING";
+  const tripOpen = isTripOpen(access.trip.status);
   const canModify = tripOpen && (access.isAdmin || expense.createdByParticipantId === access.participant.id);
   const sharers = expense.allocations.filter((a) => a.amountMinor > 0);
   const zeroShare = expense.allocations.filter((a) => a.amountMinor === 0);

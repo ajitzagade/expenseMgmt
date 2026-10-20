@@ -3,7 +3,7 @@
 import { UserPlus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
-import { api, ApiError } from "@/lib/api-client";
+import { api, ApiError, safeInternalPath } from "@/lib/api-client";
 import { SUPPORTED_CURRENCIES, CURRENCY_INFO, type CurrencyCode } from "@/domain/money";
 import { Alert, Button, Field, Input, Select } from "@/components/ui";
 
@@ -36,7 +36,7 @@ function SignupFormInner() {
           preferredCurrency: form.get("currency"),
         },
       });
-      router.push(next && next.startsWith("/") ? next : "/welcome");
+      router.push(safeInternalPath(next) ?? "/welcome");
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");

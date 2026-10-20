@@ -1,15 +1,13 @@
 import "server-only";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import { sha256Hex } from "@/server/token";
 import { prisma } from "@/lib/db";
 import { AppError } from "@/server/errors";
 import { assertTripOpen, requireTripAdmin } from "./trip-service";
+import type { Prisma } from "@/generated/prisma/client";
 import { logActivity } from "./activity";
 
 const INVITE_DAYS = 7;
-
-function hashInviteToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
 
 /**
  * Creates a shareable invite. The raw token is returned exactly once (it is
@@ -34,7 +32,7 @@ export async function createInvitation(
   await prisma.tripInvitation.create({
     data: {
       tripId,
-      tokenHash: hashInviteToken(token),
+      tokenHash: sha256Hex(token),
       createdById: userId,
       participantId,
       expiresAt,
@@ -69,7 +67,7 @@ export async function revokeInvitation(tripId: string, userId: string, invitatio
 
 async function findUsableInvitation(token: string) {
   const invitation = await prisma.tripInvitation.findUnique({
-    where: { tokenHash: hashInviteToken(token) },
+    where: { tokenHash: sha256Hex(token) },
     include: { trip: true, participant: { select: { id: true, name: true, userId: true, isActive: true } } },
   });
   if (
@@ -80,6 +78,8 @@ async function findUsableInvitation(token: string) {
   ) {
     throw AppError.notFound("This invite link is invalid or has expired");
   }
+  // A closed trip's roster is final: its invite links stop working.
+  assertTripOpen(invitation.trip);
   return invitation;
 }
 
@@ -132,14 +132,25 @@ export async function acceptInvitation(
       return { tripId }; // Already a member: joining twice is a no-op.
     }
 
+    // Atomic use-count guard: concurrent accepts cannot push past maxUses.
+    const reserved = await tx.tripInvitation.updateMany({
+      where: { id: invitation.id, useCount: { lt: invitation.maxUses } },
+      data: { useCount: { increment: 1 } },
+    });
+    if (reserved.count !== 1) {
+      throw AppError.notFound("This invite link is invalid or has expired");
+    }
+
     if (targetId) {
       const guest = await tx.participant.findFirst({ where: { id: targetId, tripId } });
       const guestName = guest?.name ?? "guest";
+      // Keep the guest's name if adopting the account name would collide.
+      const claimName = await resolveNameClash(tx, tripId, user.name, targetId);
       // updateMany's filter guards against two users claiming the same guest:
       // the second caller matches zero rows inside its transaction.
       const claimed = await tx.participant.updateMany({
         where: { id: targetId, tripId, userId: null, isActive: true },
-        data: { userId: user.id, name: user.name },
+        data: { userId: user.id, name: claimName },
       });
       if (claimed.count !== 1) {
         throw AppError.conflict("That identity has already been claimed", "ALREADY_CLAIMED");
@@ -152,15 +163,44 @@ export async function acceptInvitation(
         data: { participantId: targetId },
       });
     } else {
-      await tx.participant.create({ data: { tripId, userId: user.id, name: user.name } });
+      const joinName = await resolveNameClash(tx, tripId, user.name, null);
+      await tx.participant.create({ data: { tripId, userId: user.id, name: joinName } });
       await logActivity(tx, {
         tripId,
         actorId: user.id,
         type: "PARTICIPANT_JOINED",
-        message: `${user.name} joined the trip`,
+        message: `${joinName} joined the trip`,
       });
     }
-    await tx.tripInvitation.update({ where: { id: invitation.id }, data: { useCount: { increment: 1 } } });
     return { tripId };
   });
+}
+
+/**
+ * Per-trip display names stay unique (case-insensitive) so expense lists and
+ * settlements are never ambiguous. On a clash, a numeric suffix is added —
+ * except when the clashing row is the participant being claimed, whose
+ * existing guest name is simply kept.
+ */
+async function resolveNameClash(
+  tx: Prisma.TransactionClient,
+  tripId: string,
+  desired: string,
+  claimingParticipantId: string | null,
+): Promise<string> {
+  const taken = new Set(
+    (await tx.participant.findMany({ where: { tripId, id: { not: claimingParticipantId ?? undefined } }, select: { name: true } })).map(
+      (p) => p.name.toLowerCase(),
+    ),
+  );
+  if (!taken.has(desired.toLowerCase())) return desired;
+  if (claimingParticipantId) {
+    const current = await tx.participant.findUnique({ where: { id: claimingParticipantId }, select: { name: true } });
+    if (current) return current.name; // keep the guest's unambiguous name
+  }
+  for (let n = 2; n < 100; n++) {
+    const candidate = `${desired} ${n}`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+  return desired;
 }

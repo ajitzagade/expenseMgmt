@@ -9,8 +9,17 @@ const SESSION_COOKIE = "ts_session";
 const SESSION_DAYS = 30;
 
 /** Raw tokens never touch the database; only their SHA-256 hash is stored. */
+function sessionSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret && process.env.NODE_ENV === "production") {
+    // Refuse to run with an unpeppered hash rather than silently degrading.
+    throw new Error("SESSION_SECRET must be set in production");
+  }
+  return secret ?? "dev-only";
+}
+
 function hashToken(token: string): string {
-  return createHash("sha256").update(`${token}:${process.env.SESSION_SECRET ?? ""}`).digest("hex");
+  return createHash("sha256").update(`${token}:${sessionSecret()}`).digest("hex");
 }
 
 export async function createSession(userId: string): Promise<void> {

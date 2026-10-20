@@ -14,7 +14,7 @@ export const GET = withErrorHandling(async (_req: NextRequest, ctx: Ctx) => {
 });
 
 export const POST = withErrorHandling(async (req: NextRequest, ctx: Ctx) => {
-  enforceRateLimit(req, "create-invite", 30, 15 * 60 * 1000);
+  await enforceRateLimit(req, "create-invite", 30, 15 * 60 * 1000);
   const user = await requireUser();
   const { tripId } = await ctx.params;
   const { participantId } = await parseBody(req, createInvitationSchema);
