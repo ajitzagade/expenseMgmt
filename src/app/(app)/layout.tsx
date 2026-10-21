@@ -24,6 +24,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             </Link>
             <Link
               href="/profile"
+              aria-label={`Profile (${user.name})`}
               className="flex items-center gap-2 rounded-lg px-3 py-2 font-semibold text-ink-soft hover:bg-line/50 hover:text-ink"
             >
               <Avatar name={user.name} size="sm" />

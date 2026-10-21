@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { AnchorHTMLAttributes, ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 import { TRIP_COLORS, initials } from "@/lib/format";
 
 function cx(...classes: (string | false | null | undefined)[]): string {
@@ -98,8 +98,16 @@ export function Field({
 
 // ---------- Surfaces & feedback ----------
 
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cx("rounded-card border border-line/80 bg-surface shadow-card", className)}>{children}</div>;
+export function Card({
+  className,
+  children,
+  ...rest
+}: { className?: string; children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={cx("rounded-card border border-line/80 bg-surface shadow-card", className)} {...rest}>
+      {children}
+    </div>
+  );
 }
 
 export function Badge({
@@ -110,10 +118,14 @@ export function Badge({
   children: ReactNode;
 }) {
   const tones = {
-    neutral: "bg-line/60 text-ink-soft",
+    // text-ink (not text-ink-soft): ink-soft on this light chip background
+    // computes to 4.45:1, just under the 4.5:1 WCAG AA minimum for normal text.
+    neutral: "bg-line/60 text-ink",
     positive: "bg-positive/10 text-positive",
     negative: "bg-negative/10 text-negative",
-    accent: "bg-accent text-accent-deep",
+    // text-ink (not text-accent-deep): accent-deep on bg-accent computes to
+    // only 3.11:1, well under the 4.5:1 WCAG AA minimum for normal text.
+    accent: "bg-accent text-ink",
     primary: "bg-primary-soft text-primary",
   } as const;
   return (

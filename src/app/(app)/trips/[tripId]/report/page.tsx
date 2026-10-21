@@ -46,7 +46,7 @@ export default async function ReportPage({ params }: { params: Promise<{ tripId:
           </p>
         </Card>
 
-        <Card className="overflow-x-auto p-5">
+        <Card className="overflow-x-auto p-5" tabIndex={0} role="region" aria-label="Per-person summary table, scrollable">
           <h3 className="font-medium text-ink">Per-person summary</h3>
           <table className="mt-3 w-full min-w-[560px] text-sm">
             <thead>
@@ -128,7 +128,7 @@ export default async function ReportPage({ params }: { params: Promise<{ tripId:
           </Card>
         )}
 
-        <Card className="overflow-x-auto p-5">
+        <Card className="overflow-x-auto p-5" tabIndex={0} role="region" aria-label="All expenses table, scrollable">
           <h3 className="font-medium text-ink">All expenses</h3>
           <table className="mt-3 w-full min-w-[560px] text-sm">
             <thead>
